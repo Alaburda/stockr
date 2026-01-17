@@ -1,0 +1,35 @@
+# R
+.Rhistory
+.RData
+.Rproj.user/
+*.Rproj
+
+# Quarto
+_output/
+_freeze/
+*.knit.md
+.quarto/
+
+# Data
+# Keep the database for deployment, but ignore local R cache
+.Rdata
+.Rdebug
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Node dependencies (if needed)
+node_modules/
+
+# Environment
+.env
+.env.local
+
+/.quarto/

@@ -1,0 +1,117 @@
+---
+title: "Stockr - Stock Price Viewer"
+subtitle: "Query your portfolio with ease"
+format: html
+engine: knitr
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+```
+
+## Welcome to Stockr
+
+This page allows you to view historical stock data for your portfolio.
+
+```{ojs}
+//| echo: false
+
+// Import DuckDB from WASM
+import('https://cdn.jsdelivr.net/npm/@duckdb/wasm').then(async (DuckDBModule) => {
+  const duckdb = await DuckDBModule.Database.new();
+  return duckdb;
+});
+
+// Fetch and display stock data
+async function loadStockData() {
+  try {
+    const response = await fetch('./data/stocks.duckdb');
+    if (!response.ok) throw new Error('Failed to load database');
+    return response.arrayBuffer();
+  } catch (e) {
+    console.error('Database load error:', e);
+    return null;
+  }
+}
+
+// Display message
+html`<p>Loading stock data...</p>`
+```
+
+### Stock Data
+
+The application uses a DuckDB database with stock price data. Currently tracking: **SLV**
+
+Below is a preview of the data structure:
+
+```{r data-preview}
+library(duckdb)
+library(dplyr)
+library(knitr)
+
+db_path <- "data/stocks.duckdb"
+if (file.exists(db_path)) {
+  con <- dbConnect(duckdb(), dbdir = db_path, read_only = TRUE)
+  
+  # Get summary stats
+  summary_stats <- dbGetQuery(con, "
+    SELECT 
+      ticker,
+      COUNT(*) as record_count,
+      MIN(date::date) as first_date,
+      MAX(date::date) as last_date,
+      ROUND(MIN(close), 2) as min_price,
+      ROUND(MAX(close), 2) as max_price,
+      ROUND(AVG(close), 2) as avg_price
+    FROM stock_prices
+    GROUP BY ticker
+  ")
+  
+  print(kable(summary_stats, format = "html"))
+  
+  # Show recent data
+  cat("\n\n#### Recent Prices\n\n")
+  recent <- dbGetQuery(con, "
+    SELECT 
+      date::date as date,
+      ticker,
+      ROUND(open, 2) as open,
+      ROUND(high, 2) as high,
+      ROUND(low, 2) as low,
+      ROUND(close, 2) as close,
+      volume
+    FROM stock_prices
+    ORDER BY date DESC
+    LIMIT 10
+  ")
+  
+  print(kable(recent, format = "html"))
+  
+  dbDisconnect(con)
+} else {
+  cat("Database not found. Run R/fetch_data.R to create it.")
+}
+```
+
+## How to Use
+
+1. **Update Data**: Run the R script to fetch the latest stock data:
+   ```bash
+   Rscript R/fetch_data.R
+   ```
+
+2. **View Changes**: The page will reflect your stock portfolio when deployed.
+
+3. **Add More Tickers**: Edit `R/fetch_data.R` to include additional stock symbols.
+
+## Technologies Used
+
+- **R & quantmod**: For fetching real stock data from Yahoo Finance
+- **DuckDB**: Lightweight SQL database for stock data
+- **Quarto**: Static site generation with R integration
+- **Observable JS**: Interactive visualizations (in development)
+- **GitHub Pages**: Free static hosting with CI/CD
+
+---
+
+*Last updated: `r format(Sys.time(), '%Y-%m-%d %H:%M:%S')`*
