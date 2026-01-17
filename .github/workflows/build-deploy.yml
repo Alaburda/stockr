@@ -49,7 +49,7 @@ jobs:
         cp -f data/stocks.duckdb _output/data/stocks.duckdb
     
     - name: Upload site artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: site-build
         path: _output
