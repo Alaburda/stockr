@@ -2,9 +2,9 @@ name: Build and Deploy to GitHub Pages
 
 on:
   push:
-    branches: [ main ]
+    branches: [ master, main ]
   pull_request:
-    branches: [ main ]
+    branches: [ master, main ]
   schedule:
     # Run daily at 2 AM UTC to update stock data
     - cron: '0 2 * * *'
@@ -43,20 +43,22 @@ jobs:
     - name: Render Quarto document
       run: quarto render index.qmd --to html
     
-    - name: Upload artifact
+    - name: Include DuckDB in site output
+      run: |
+        mkdir -p _output/data
+        cp -f data/stocks.duckdb _output/data/stocks.duckdb
+    
+    - name: Upload site artifact
       uses: actions/upload-artifact@v3
       with:
         name: site-build
-        path: |
-          index.html
-          data/stocks.duckdb
-        retention-days: 30
+        path: _output
+        retention-days: 7
     
     - name: Deploy to GitHub Pages
-      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
       uses: peaceiris/actions-gh-pages@v3
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
-        publish_dir: ./
-        keep_files: true
-        cname: stockr.com
+        publish_dir: ./_output
+        keep_files: false
