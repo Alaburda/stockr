@@ -10,6 +10,8 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 library(plotly)
 library(dplyr)
 library(duckdb)
+library(crosstalk)
+library(htmltools)
 ```
 
 ## Welcome to Stockr
@@ -22,21 +24,38 @@ con <- dbConnect(duckdb(), dbdir = "data/stocks.duckdb", read_only = TRUE)
 stock_data <- dbGetQuery(con, "SELECT * FROM stock_prices ORDER BY date DESC")
 dbDisconnect(con)
 
-# Convert date to proper format
+# Convert date to proper format and sort
 stock_data$date <- as.Date(stock_data$date)
+stock_data <- stock_data %>% arrange(ticker, date)
 
 # Get unique tickers and date range
 tickers <- unique(stock_data$ticker)
 date_min <- min(stock_data$date)
 date_max <- max(stock_data$date)
+
+# Shared data for client-side filtering
+sd <- SharedData$new(stock_data, key = ~ticker, group = "ticker")
+```
+
+## 🎛️ Ticker Selection
+
+Use the dropdown to pick one of the preselected tickers (SLV, NVDA, AAPL, ADBE, MP). You can also type another ticker symbol; if it's present in the dataset it will display. To add a brand-new ticker, run the fetch script with that symbol and re-render.
+
+```{r ticker-filter}
+filter_select(
+  id = "ticker",
+  label = "Select ticker (type to search or add):",
+  sharedData = sd,
+  ~ticker,
+  multiple = FALSE
+)
 ```
 
 ## 📊 Stock Price Chart
 
 ```{r price-chart}
 # Create interactive price chart
-p1 <- stock_data %>%
-  plot_ly(x = ~date, y = ~close, type = 'scatter', mode = 'lines',
+p1 <- plot_ly(sd, x = ~date, y = ~close, type = 'scatter', mode = 'lines',
           name = ~ticker, color = ~ticker) %>%
   layout(
     title = "Stock Price History",
@@ -54,8 +73,7 @@ p1
 
 ```{r candlestick-chart}
 # Create candlestick chart
-p_candle <- stock_data %>%
-  arrange(date) %>%
+p_candle <- sd %>%
   plot_ly(x = ~date, type = "candlestick",
           open = ~open, close = ~close,
           high = ~high, low = ~low,
@@ -78,8 +96,7 @@ p_candle
 
 ```{r volume-chart}
 # Create volume chart
-p2 <- stock_data %>%
-  plot_ly(x = ~date, y = ~volume, type = 'bar',
+p2 <- plot_ly(sd, x = ~date, y = ~volume, type = 'bar',
           name = ~ticker, color = ~ticker) %>%
   layout(
     title = "Trading Volume",
@@ -139,8 +156,7 @@ kable(recent, format = "html")
 
 ```{r price-distribution}
 # Create histogram of closing prices
-p3 <- stock_data %>%
-  plot_ly(x = ~close, type = 'histogram', nbinsx = 50,
+p3 <- plot_ly(sd, x = ~close, type = 'histogram', nbinsx = 50,
           name = 'Price Distribution',
           marker = list(color = 'rgba(52, 152, 219, 0.7)')) %>%
   layout(

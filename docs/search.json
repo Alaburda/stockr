@@ -46,21 +46,21 @@
     "href": "index.html#data-summary",
     "title": "Stockr - Interactive Stock Viewer",
     "section": "📋 Data Summary",
-    "text": "📋 Data Summary\n\n\n\n\n\nticker\nRecords\nFirst_Date\nLast_Date\nMin_Price\nMax_Price\nAvg_Price\nCurrent_Price\n\n\n\n\nSLV\n1519\n2020-01-02\n2026-01-16\n$11.21\n$84.56\n$24.75\n$16.81"
+    "text": "📋 Data Summary\n\n\n\n\n\nticker\nRecords\nFirst_Date\nLast_Date\nMin_Price\nMax_Price\nAvg_Price\nCurrent_Price\n\n\n\n\nAAPL\n1519\n2020-01-02\n2026-01-16\n$56.09\n$286.19\n$167.74\n$255.53\n\n\nADBE\n1519\n2020-01-02\n2026-01-16\n$275.2\n$688.37\n$455.89\n$296.12\n\n\nMP\n1401\n2020-06-22\n2026-01-16\n$9.78\n$98.65\n$29.87\n$68.98\n\n\nNVDA\n1519\n2020-01-02\n2026-01-16\n$4.91\n$207.04\n$58.54\n$186.23\n\n\nSLV\n1519\n2020-01-02\n2026-01-16\n$11.21\n$84.56\n$24.75\n$81.02"
   },
   {
     "objectID": "index.html#latest-prices-last-30-trading-days",
     "href": "index.html#latest-prices-last-30-trading-days",
     "title": "Stockr - Interactive Stock Viewer",
     "section": "📅 Latest Prices (Last 30 Trading Days)",
-    "text": "📅 Latest Prices (Last 30 Trading Days)\n\n\n\n\n\nDate\nTicker\nOpen\nHigh\nLow\nClose\nVolume\n\n\n\n\n2025-12-04\nSLV\n$52.28\n$52.36\n$51.14\n$51.76\n48,740,300\n\n\n2025-12-05\nSLV\n$52.71\n$53.82\n$52.53\n$52.95\n43,566,000\n\n\n2025-12-08\nSLV\n$52.89\n$52.97\n$52.26\n$52.71\n19,711,200\n\n\n2025-12-09\nSLV\n$53.39\n$55.19\n$53.36\n$55.17\n59,738,900\n\n\n2025-12-10\nSLV\n$55.13\n$56.22\n$54.48\n$56.07\n54,915,000\n\n\n2025-12-11\nSLV\n$56.77\n$58.3\n$56.47\n$57.62\n67,910,900\n\n\n2025-12-12\nSLV\n$58.53\n$58.56\n$55.13\n$56.1\n78,667,400\n\n\n2025-12-15\nSLV\n$57.84\n$58.2\n$57.02\n$58.11\n43,227,800\n\n\n2025-12-16\nSLV\n$57.61\n$57.99\n$57.1\n$57.73\n32,461,300\n\n\n2025-12-17\nSLV\n$59.27\n$60.64\n$59.05\n$60.26\n65,128,000\n\n\n2025-12-18\nSLV\n$59.82\n$60.03\n$58.58\n$59.32\n47,603,400\n\n\n2025-12-19\nSLV\n$59.79\n$61.16\n$59.69\n$60.93\n42,610,000\n\n\n2025-12-22\nSLV\n$62.6\n$62.82\n$61.74\n$62.47\n50,621,700\n\n\n2025-12-23\nSLV\n$63.68\n$64.88\n$62.37\n$64.84\n75,680,000\n\n\n2025-12-24\nSLV\n$65.08\n$65.53\n$63.61\n$65.22\n58,826,000\n\n\n2025-12-26\nSLV\n$67.83\n$71.23\n$67.35\n$71.12\n139,161,200\n\n\n2025-12-29\nSLV\n$65.66\n$66.49\n$63.92\n$66.01\n153,207,900\n\n\n2025-12-30\nSLV\n$69.11\n$70.76\n$68.03\n$68.98\n117,759,200\n\n\n2025-12-31\nSLV\n$65.54\n$66.88\n$63.53\n$64.42\n114,745,300\n\n\n2026-01-02\nSLV\n$67.3\n$67.36\n$64.75\n$65.75\n75,553,300\n\n\n2026-01-05\nSLV\n$69.45\n$70.6\n$68.52\n$69.08\n103,313,300\n\n\n2026-01-06\nSLV\n$71.43\n$73.84\n$71.35\n$73.71\n105,539,100\n\n\n2026-01-07\nSLV\n$69.82\n$71.55\n$69.22\n$70.96\n93,679,500\n\n\n2026-01-08\nSLV\n$67.24\n$69.77\n$66.92\n$69.71\n77,918,300\n\n\n2026-01-09\nSLV\n$71.31\n$72.99\n$70.87\n$72.38\n90,650,100\n\n\n2026-01-12\nSLV\n$76.11\n$78.18\n$76\n$77.23\n105,429,600\n\n\n2026-01-13\nSLV\n$80.03\n$80.8\n$77.86\n$78.6\n140,656,900\n\n\n2026-01-14\nSLV\n$83.34\n$84.78\n$81.28\n$84.56\n177,419,400\n\n\n2026-01-15\nSLV\n$80.74\n$84.33\n$80.54\n$83.32\n160,702,100\n\n\n2026-01-16\nSLV\n$80.33\n$81.52\n$78.75\n$81.02\n132,245,600"
+    "text": "📅 Latest Prices (Last 30 Trading Days)\n\n\n\n\n\nDate\nTicker\nOpen\nHigh\nLow\nClose\nVolume\n\n\n\n\n2026-01-09\nAAPL\n$259.08\n$260.21\n$256.22\n$259.37\n39,997,000\n\n\n2026-01-09\nADBE\n$335.88\n$335.88\n$328\n$333.95\n3,250,100\n\n\n2026-01-09\nMP\n$61.89\n$62.98\n$59.35\n$62\n9,172,300\n\n\n2026-01-09\nNVDA\n$185.08\n$186.34\n$183.67\n$184.86\n131,327,500\n\n\n2026-01-09\nSLV\n$71.31\n$72.99\n$70.87\n$72.38\n90,650,100\n\n\n2026-01-12\nAAPL\n$259.16\n$261.3\n$256.8\n$260.25\n45,263,800\n\n\n2026-01-12\nADBE\n$327.77\n$330.67\n$323.5\n$327.65\n3,541,400\n\n\n2026-01-12\nMP\n$63.37\n$67\n$62.23\n$65.34\n12,150,700\n\n\n2026-01-12\nNVDA\n$183.22\n$187.12\n$183.02\n$184.94\n137,968,500\n\n\n2026-01-12\nSLV\n$76.11\n$78.18\n$76\n$77.23\n105,429,600\n\n\n2026-01-13\nAAPL\n$258.72\n$261.81\n$258.39\n$261.05\n45,730,800\n\n\n2026-01-13\nADBE\n$322.49\n$323\n$307.91\n$309.93\n7,217,300\n\n\n2026-01-13\nMP\n$67.72\n$68.44\n$63.4\n$63.82\n9,952,200\n\n\n2026-01-13\nNVDA\n$185\n$188.11\n$183.4\n$185.81\n160,128,900\n\n\n2026-01-13\nSLV\n$80.03\n$80.8\n$77.86\n$78.6\n140,656,900\n\n\n2026-01-14\nAAPL\n$259.49\n$261.82\n$256.71\n$259.96\n40,019,400\n\n\n2026-01-14\nADBE\n$308.57\n$309.73\n$302.47\n$304.44\n5,712,600\n\n\n2026-01-14\nMP\n$64.03\n$70.07\n$62.2\n$69.3\n12,394,900\n\n\n2026-01-14\nNVDA\n$184.32\n$184.46\n$180.8\n$183.14\n159,586,100\n\n\n2026-01-14\nSLV\n$83.34\n$84.78\n$81.28\n$84.56\n177,419,400\n\n\n2026-01-15\nAAPL\n$260.65\n$261.04\n$257.05\n$258.21\n39,388,600\n\n\n2026-01-15\nADBE\n$304.97\n$305.82\n$301.4\n$304.09\n4,774,300\n\n\n2026-01-15\nMP\n$68.24\n$68.48\n$65.8\n$66.7\n10,529,500\n\n\n2026-01-15\nNVDA\n$186.5\n$189.7\n$186.33\n$187.05\n206,188,600\n\n\n2026-01-15\nSLV\n$80.74\n$84.33\n$80.54\n$83.32\n160,702,100\n\n\n2026-01-16\nAAPL\n$257.9\n$258.9\n$254.93\n$255.53\n72,018,600\n\n\n2026-01-16\nADBE\n$304.56\n$304.88\n$295.42\n$296.12\n8,506,200\n\n\n2026-01-16\nMP\n$67.25\n$69.65\n$65.68\n$68.98\n6,738,700\n\n\n2026-01-16\nNVDA\n$189.08\n$190.44\n$186.08\n$186.23\n187,613,900\n\n\n2026-01-16\nSLV\n$80.33\n$81.52\n$78.75\n$81.02\n132,245,600"
   },
   {
     "objectID": "index.html#price-range-distribution",
     "href": "index.html#price-range-distribution",
     "title": "Stockr - Interactive Stock Viewer",
     "section": "📊 Price Range Distribution",
-    "text": "📊 Price Range Distribution\n\n\n\n\n\n\n\nData Source: Yahoo Finance\nLast Updated: 2026-01-16\nRecords: 1519 pricing records"
+    "text": "📊 Price Range Distribution\n\n\n\n\n\n\n\nData Source: Yahoo Finance\nLast Updated: 2026-01-16\nRecords: 7477 pricing records"
   },
   {
     "objectID": "index.html#candlestick-chart",
@@ -68,5 +68,12 @@
     "title": "Stockr - Interactive Stock Viewer",
     "section": "🕯️ Candlestick Chart",
     "text": "🕯️ Candlestick Chart"
+  },
+  {
+    "objectID": "index.html#ticker-selection",
+    "href": "index.html#ticker-selection",
+    "title": "Stockr - Interactive Stock Viewer",
+    "section": "🎛️ Ticker Selection",
+    "text": "🎛️ Ticker Selection\nUse the dropdown to pick one of the preselected tickers (SLV, NVDA, AAPL, ADBE, MP). You can also type another ticker symbol; if it’s present in the dataset it will display. To add a brand-new ticker, run the fetch script with that symbol and re-render.\n\n\n\nSelect ticker (type to search or add):"
   }
 ]
