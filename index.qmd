@@ -1,117 +1,137 @@
 ---
-title: "Stockr - Stock Price Viewer"
-subtitle: "Query your portfolio with ease"
+title: "Stockr - Interactive Stock Viewer"
+subtitle: "Track your portfolio in real-time"
 format: html
 engine: knitr
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+library(plotly)
+library(dplyr)
+library(duckdb)
 ```
 
 ## Welcome to Stockr
 
-This page allows you to view historical stock data for your portfolio.
+Interactive stock price tracking with real-time charts and filtering.
 
-```{ojs}
-//| echo: false
+```{r load-data}
+# Load stock data
+con <- dbConnect(duckdb(), dbdir = "data/stocks.duckdb", read_only = TRUE)
+stock_data <- dbGetQuery(con, "SELECT * FROM stock_prices ORDER BY date DESC")
+dbDisconnect(con)
 
-// Import DuckDB from WASM
-import('https://cdn.jsdelivr.net/npm/@duckdb/wasm').then(async (DuckDBModule) => {
-  const duckdb = await DuckDBModule.Database.new();
-  return duckdb;
-});
+# Convert date to proper format
+stock_data$date <- as.Date(stock_data$date)
 
-// Fetch and display stock data
-async function loadStockData() {
-  try {
-    const response = await fetch('./data/stocks.duckdb');
-    if (!response.ok) throw new Error('Failed to load database');
-    return response.arrayBuffer();
-  } catch (e) {
-    console.error('Database load error:', e);
-    return null;
-  }
-}
-
-// Display message
-html`<p>Loading stock data...</p>`
+# Get unique tickers and date range
+tickers <- unique(stock_data$ticker)
+date_min <- min(stock_data$date)
+date_max <- max(stock_data$date)
 ```
 
-### Stock Data
+## 📊 Stock Price Chart
 
-The application uses a DuckDB database with stock price data. Currently tracking: **SLV**
+```{r price-chart}
+# Create interactive price chart
+p1 <- stock_data %>%
+  plot_ly(x = ~date, y = ~close, type = 'scatter', mode = 'lines',
+          name = ~ticker, color = ~ticker) %>%
+  layout(
+    title = "Stock Price History",
+    xaxis = list(title = "Date"),
+    yaxis = list(title = "Price ($)"),
+    hovermode = "x unified",
+    template = "plotly_white",
+    height = 500
+  )
 
-Below is a preview of the data structure:
+p1
+```
 
-```{r data-preview}
-library(duckdb)
-library(dplyr)
+## 📈 Trading Volume
+
+```{r volume-chart}
+# Create volume chart
+p2 <- stock_data %>%
+  plot_ly(x = ~date, y = ~volume, type = 'bar',
+          name = ~ticker, color = ~ticker) %>%
+  layout(
+    title = "Trading Volume",
+    xaxis = list(title = "Date"),
+    yaxis = list(title = "Volume"),
+    hovermode = "x unified",
+    template = "plotly_white",
+    height = 400
+  )
+
+p2
+```
+
+## 📋 Data Summary
+
+```{r data-table}
 library(knitr)
 
-db_path <- "data/stocks.duckdb"
-if (file.exists(db_path)) {
-  con <- dbConnect(duckdb(), dbdir = db_path, read_only = TRUE)
-  
-  # Get summary stats
-  summary_stats <- dbGetQuery(con, "
-    SELECT 
-      ticker,
-      COUNT(*) as record_count,
-      MIN(date::date) as first_date,
-      MAX(date::date) as last_date,
-      ROUND(MIN(close), 2) as min_price,
-      ROUND(MAX(close), 2) as max_price,
-      ROUND(AVG(close), 2) as avg_price
-    FROM stock_prices
-    GROUP BY ticker
-  ")
-  
-  print(kable(summary_stats, format = "html"))
-  
-  # Show recent data
-  cat("\n\n#### Recent Prices\n\n")
-  recent <- dbGetQuery(con, "
-    SELECT 
-      date::date as date,
-      ticker,
-      ROUND(open, 2) as open,
-      ROUND(high, 2) as high,
-      ROUND(low, 2) as low,
-      ROUND(close, 2) as close,
-      volume
-    FROM stock_prices
-    ORDER BY date DESC
-    LIMIT 10
-  ")
-  
-  print(kable(recent, format = "html"))
-  
-  dbDisconnect(con)
-} else {
-  cat("Database not found. Run R/fetch_data.R to create it.")
-}
+# Show summary statistics
+summary_stats <- stock_data %>%
+  group_by(ticker) %>%
+  summarise(
+    Records = n(),
+    First_Date = format(min(date), "%Y-%m-%d"),
+    Last_Date = format(max(date), "%Y-%m-%d"),
+    Min_Price = paste0("$", round(min(close), 2)),
+    Max_Price = paste0("$", round(max(close), 2)),
+    Avg_Price = paste0("$", round(mean(close), 2)),
+    Current_Price = paste0("$", round(last(close), 2)),
+    .groups = 'drop'
+  )
+
+kable(summary_stats, format = "html")
 ```
 
-## How to Use
+## 📅 Latest Prices (Last 30 Trading Days)
 
-1. **Update Data**: Run the R script to fetch the latest stock data:
-   ```bash
-   Rscript R/fetch_data.R
-   ```
+```{r recent-prices}
+recent <- stock_data %>%
+  arrange(desc(date)) %>%
+  slice_head(n = 30) %>%
+  arrange(date) %>%
+  select(Date = date, Ticker = ticker, Open = open, High = high, 
+         Low = low, Close = close, Volume = volume) %>%
+  mutate(
+    Open = paste0("$", round(Open, 2)),
+    High = paste0("$", round(High, 2)),
+    Low = paste0("$", round(Low, 2)),
+    Close = paste0("$", round(Close, 2)),
+    Volume = format(Volume, big.mark = ",")
+  )
 
-2. **View Changes**: The page will reflect your stock portfolio when deployed.
+kable(recent, format = "html")
+```
 
-3. **Add More Tickers**: Edit `R/fetch_data.R` to include additional stock symbols.
+## 📊 Price Range Distribution
 
-## Technologies Used
+```{r price-distribution}
+# Create histogram of closing prices
+p3 <- stock_data %>%
+  plot_ly(x = ~close, type = 'histogram', nbinsx = 50,
+          name = 'Price Distribution',
+          marker = list(color = 'rgba(52, 152, 219, 0.7)')) %>%
+  layout(
+    title = "Closing Price Distribution",
+    xaxis = list(title = "Price ($)"),
+    yaxis = list(title = "Frequency"),
+    template = "plotly_white",
+    height = 400
+  )
 
-- **R & quantmod**: For fetching real stock data from Yahoo Finance
-- **DuckDB**: Lightweight SQL database for stock data
-- **Quarto**: Static site generation with R integration
-- **Observable JS**: Interactive visualizations (in development)
-- **GitHub Pages**: Free static hosting with CI/CD
+p3
+```
 
 ---
 
-*Last updated: `r format(Sys.time(), '%Y-%m-%d %H:%M:%S')`*
+**Data Source:** Yahoo Finance  
+**Last Updated:** `r format(max(stock_data$date), '%Y-%m-%d')`  
+**Records:** `r nrow(stock_data)` pricing records
