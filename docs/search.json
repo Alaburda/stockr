@@ -60,7 +60,7 @@
     "href": "index.html#price-range-distribution",
     "title": "Stockr - Interactive Stock Viewer",
     "section": "📊 Price Range Distribution",
-    "text": "📊 Price Range Distribution\n\n\n\n\n\n\n\nData Source: Yahoo Finance\nLast Updated: 2026-01-16\nRecords: 7477 pricing records"
+    "text": "📊 Price Range Distribution"
   },
   {
     "objectID": "index.html#candlestick-chart",
@@ -74,6 +74,13 @@
     "href": "index.html#ticker-selection",
     "title": "Stockr - Interactive Stock Viewer",
     "section": "🎛️ Ticker Selection",
-    "text": "🎛️ Ticker Selection\nUse the dropdown to pick one of the preselected tickers (SLV, NVDA, AAPL, ADBE, MP). You can also type another ticker symbol; if it’s present in the dataset it will display. To add a brand-new ticker, run the fetch script with that symbol and re-render.\n\n\n\nSelect ticker (type to search or add):"
+    "text": "🎛️ Ticker Selection\nUse the dropdown to pick one of the preselected tickers (SLV, NVDA, AAPL, ADBE, MP). You can also type another ticker symbol; if it’s present in the dataset it will display. To add a brand-new ticker, run the fetch script with that symbol and re-render.\n\n\n\nSelect ticker (type to search or add):\n\n\n\n\n\n\n\n\n  Add or jump to a ticker (type symbol and click Apply):\n  \n  Apply\n  (If the ticker isn't in the dataset, add it in R/fetch_data.R then rerun render_site.)"
+  },
+  {
+    "objectID": "index.html#sma-200-table",
+    "href": "index.html#sma-200-table",
+    "title": "Stockr - Interactive Stock Viewer",
+    "section": "📑 SMA 200 Table",
+    "text": "📑 SMA 200 Table\n\nSMA MetricsNotes\n\n\n\n\n\nSMA & ATR Extension (latest close)\n\n\nTicker\nDate\nClose\nSMA200\nPct_from_SMA200\nMA50\nPct_from_MA50\nATR30\nATR_pct\nExtension_Ratio\n\n\n\n\nAAPL\n2026-01-16\n$255.53\n$234.06\n9.18%\n$271.51\n-5.89%\n$4.6\n1.8%\n-3.27\n\n\nADBE\n2026-01-16\n$296.12\n$358.93\n-17.5%\n$334.13\n-11.38%\n$8.96\n3.03%\n-3.76\n\n\nMP\n2026-01-16\n$68.98\n$51.68\n33.49%\n$58.45\n18.02%\n$4.11\n5.96%\n3.02\n\n\nNVDA\n2026-01-16\n$186.23\n$164.06\n13.52%\n$184.56\n0.91%\n$5.65\n3.03%\n0.30\n\n\nSLV\n2026-01-16\n$81.02\n$40.97\n97.75%\n$58.28\n39.02%\n$2.85\n3.51%\n11.11\n\n\n\n\n\n\n\n\n\n\nSMA200 is the 200-day simple moving average per ticker.\nPct_from_SMA200 = (Close / SMA200 - 1) * 100.\nExtension_Ratio = Pct_from_MA50 divided by ATR_pct (ATR30 as % of price); higher values mean price is stretched versus typical volatility.\nTo analyze a new ticker, add it to R/fetch_data.R, run Rscript R/render_site.R, then refresh.\n\n\n\n\n\nData Source: Yahoo Finance\nLast Updated: 2026-01-16\nRecords: 7477 pricing records"
   }
 ]

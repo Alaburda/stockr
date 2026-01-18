@@ -12,6 +12,9 @@ library(dplyr)
 library(duckdb)
 library(crosstalk)
 library(htmltools)
+library(xts)
+library(TTR)
+library(zoo)
 ```
 
 ## Welcome to Stockr
@@ -49,6 +52,34 @@ filter_select(
   ~ticker,
   multiple = FALSE
 )
+```
+
+```{=html}
+<div style="margin-top: 0.5rem; margin-bottom: 1rem;">
+  <label for="ticker-input" style="font-weight: 600;">Add or jump to a ticker (type symbol and click Apply):</label><br>
+  <input id="ticker-input" type="text" placeholder="e.g. TSLA" style="padding:6px; width:180px; margin-right:6px;">
+  <button id="ticker-apply" style="padding:6px 10px;">Apply</button>
+  <small style="margin-left:6px; color:#555;">(If the ticker isn't in the dataset, add it in R/fetch_data.R then rerun render_site.)</small>
+</div>
+<script>
+  (() => {
+    const handle = new crosstalk.FilterHandle('ticker');
+    const input = document.getElementById('ticker-input');
+    const btn = document.getElementById('ticker-apply');
+    if (btn && input) {
+      btn.addEventListener('click', () => {
+        const val = (input.value || '').trim().toUpperCase();
+        if (val) handle.set({'ticker': [val]});
+      });
+      input.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+          const val = (input.value || '').trim().toUpperCase();
+          if (val) handle.set({'ticker': [val]});
+        }
+      });
+    }
+  })();
+</script>
 ```
 
 ## 📊 Stock Price Chart
@@ -169,6 +200,89 @@ p3 <- plot_ly(sd, x = ~close, type = 'histogram', nbinsx = 50,
 
 p3
 ```
+
+## 📑 SMA 200 Table
+
+::: {.panel-tabset}
+### SMA Metrics
+
+```{r sma-table}
+library(knitr)
+
+sma_metrics <- stock_data %>%
+  arrange(ticker, date) %>%
+  group_by(ticker) %>%
+  group_modify(~ {
+    x <- .x
+    hlc_xts <- xts::xts(x[, c("high", "low", "close")], order.by = x$date)
+    atr30 <- as.numeric(TTR::ATR(hlc_xts, n = 30)[, "atr"])
+    close <- x$close
+    sma200 <- zoo::rollapply(close, 200, mean, align = "right", fill = NA, na.rm = TRUE)
+    ma50 <- zoo::rollapply(close, 50, mean, align = "right", fill = NA, na.rm = TRUE)
+    pct_from_sma200 <- (close / sma200 - 1) * 100
+    pct_from_ma50 <- ((close - ma50) / ma50) * 100
+    atr_pct <- (atr30 / close) * 100
+    extension_ratio <- pct_from_ma50 / atr_pct
+    tibble(
+      ticker = x$ticker,
+      date = x$date,
+      close = close,
+      sma200 = sma200,
+      ma50 = ma50,
+      atr30 = atr30,
+      pct_from_sma200 = pct_from_sma200,
+      pct_from_ma50 = pct_from_ma50,
+      atr_pct = atr_pct,
+      extension_ratio = extension_ratio
+    )
+  }) %>%
+  ungroup()
+
+sma_table <- sma_metrics %>%
+  filter(
+    !is.na(sma200),
+    !is.na(ma50),
+    !is.na(atr30),
+    !is.na(atr_pct),
+    atr_pct != 0
+  ) %>%
+  group_by(ticker) %>%
+  slice_tail(n = 1) %>%
+  mutate(
+    Close = paste0("$", round(close, 2)),
+    SMA200 = paste0("$", round(sma200, 2)),
+    Pct_from_SMA200 = paste0(round(pct_from_sma200, 2), "%"),
+    MA50 = paste0("$", round(ma50, 2)),
+    Pct_from_MA50 = paste0(round(pct_from_ma50, 2), "%"),
+    ATR30 = paste0("$", round(atr30, 2)),
+    ATR_pct = paste0(round(atr_pct, 2), "%"),
+    Extension_Ratio = round(extension_ratio, 2)
+  ) %>%
+  select(
+    Ticker = ticker,
+    Date = date,
+    Close,
+    SMA200,
+    Pct_from_SMA200,
+    MA50,
+    Pct_from_MA50,
+    ATR30,
+    ATR_pct,
+    Extension_Ratio
+  ) %>%
+  arrange(Ticker)
+
+kable(sma_table, format = "html", caption = "SMA & ATR Extension (latest close)")
+```
+
+### Notes
+
+- SMA200 is the 200-day simple moving average per ticker.
+- Pct_from_SMA200 = (Close / SMA200 - 1) * 100.
+- Extension_Ratio = Pct_from_MA50 divided by ATR_pct (ATR30 as % of price); higher values mean price is stretched versus typical volatility.
+- To analyze a new ticker, add it to `R/fetch_data.R`, run `Rscript R/render_site.R`, then refresh.
+
+:::
 
 ---
 
