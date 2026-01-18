@@ -50,6 +50,30 @@ p1 <- stock_data %>%
 p1
 ```
 
+## 🕯️ Candlestick Chart
+
+```{r candlestick-chart}
+# Create candlestick chart
+p_candle <- stock_data %>%
+  arrange(date) %>%
+  plot_ly(x = ~date, type = "candlestick",
+          open = ~open, close = ~close,
+          high = ~high, low = ~low,
+          name = ~ticker) %>%
+  layout(
+    title = "OHLC Candlestick Chart",
+    xaxis = list(
+      title = "Date",
+      rangeslider = list(visible = FALSE)
+    ),
+    yaxis = list(title = "Price ($)"),
+    template = "plotly_white",
+    height = 500
+  )
+
+p_candle
+```
+
 ## 📈 Trading Volume
 
 ```{r volume-chart}

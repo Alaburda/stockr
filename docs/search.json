@@ -61,5 +61,12 @@
     "title": "Stockr - Interactive Stock Viewer",
     "section": "📊 Price Range Distribution",
     "text": "📊 Price Range Distribution\n\n\n\n\n\n\n\nData Source: Yahoo Finance\nLast Updated: 2026-01-16\nRecords: 1519 pricing records"
+  },
+  {
+    "objectID": "index.html#candlestick-chart",
+    "href": "index.html#candlestick-chart",
+    "title": "Stockr - Interactive Stock Viewer",
+    "section": "🕯️ Candlestick Chart",
+    "text": "🕯️ Candlestick Chart"
   }
 ]
