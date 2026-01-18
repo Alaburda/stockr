@@ -18,14 +18,12 @@ The goal of this project is to create a static page hosted on GitHub Pages that 
 git clone <repo-url>
 cd stockr
 
-# 2. Create the stock database
-Rscript R/fetch_data.R
+# 2. Render the site locally
+Rscript R/render_site.R
 
-# 3. Render the page locally
-quarto render index.qmd
-
-# 4. View output
-open _output/index.html
+# 3. View output
+# The rendered site is in docs/ folder
+# Test with: httpuv::runStaticServer("docs/", port = 8008)
 ```
 
 See [setup.md](setup.md) for detailed installation instructions.
@@ -56,10 +54,14 @@ stockr/
 ├── index.qmd                 # Main page (Quarto markdown)
 ├── _quarto.yml              # Quarto site configuration
 ├── styles.css               # Custom styling
-├── R/fetch_data.R           # Data fetching script
+├── R/
+│   ├── fetch_data.R         # Data fetching script
+│   └── render_site.R        # Render & deploy script
 ├── data/stocks.duckdb       # Stock price database
-└── .github/workflows/       # GitHub Actions configuration
-    └── build-deploy.yml     # CI/CD pipeline
+└── docs/                    # Rendered site (published to GitHub Pages)
+    ├── index.html
+    ├── styles.css
+    └── data/stocks.duckdb
 ```
 
 ## 🛠️ Tech Stack
@@ -78,7 +80,7 @@ stockr/
 - Git
 - GitHub account (for GitHub Pages deployment)
 
-## 🔧 Customization
+## � Customization
 
 ### Add More Stock Tickers
 
@@ -86,6 +88,11 @@ Edit `R/fetch_data.R` to include additional symbols:
 
 ```r
 symbols <- c("SLV", "GLD", "AAPL")
+```
+
+Then run the render script to update the site:
+```bash
+Rscript R/render_site.R
 ```
 
 ### Update Styling
@@ -98,15 +105,26 @@ Use Observable JavaScript blocks in `index.qmd` for interactive charts
 
 ## 🚢 Deployment
 
-1. Push to GitHub
-2. Enable GitHub Pages in repository settings
-3. Select `gh-pages` branch as source
-4. Your site goes live at `https://<username>.github.io/stockr/`
+The site is static and ready to deploy to GitHub Pages:
 
-The GitHub Actions workflow automatically:
-- Fetches latest stock data daily
-- Re-renders the HTML page
-- Deploys to GitHub Pages
+1. **Render locally**:
+   ```bash
+   Rscript R/render_site.R
+   ```
+
+2. **Commit the rendered site**:
+   ```bash
+   git add docs/
+   git commit -m "Update: rebuild site"
+   git push origin master
+   ```
+
+3. **Enable GitHub Pages**:
+   - Go to repository Settings → Pages
+   - Select `docs` folder from `master` branch
+   - Your site goes live immediately!
+
+**No CI/CD pipeline needed** — fast, simple, static deployment.
 
 ## 📝 File Descriptions
 
@@ -114,8 +132,9 @@ The GitHub Actions workflow automatically:
 |------|---------|
 | `index.qmd` | Main Quarto document (HTML + R code) |
 | `R/fetch_data.R` | Fetches stock data from Yahoo Finance |
+| `R/render_site.R` | Renders site to `docs/` folder |
 | `data/stocks.duckdb` | DuckDB database with stock prices |
-| `.github/workflows/build-deploy.yml` | GitHub Actions CI/CD pipeline |
+| `docs/` | Rendered site (published to GitHub Pages) |
 | `_quarto.yml` | Quarto configuration |
 | `styles.css` | Custom CSS styling |
 | `setup.md` | Detailed setup instructions |
@@ -135,25 +154,20 @@ git push origin main
 
 GitHub Actions will automatically build and deploy.
 
-## 📚 Learn More
+## � Update Workflow
 
-- [Quarto Documentation](https://quarto.org/)
-- [quantmod Package](https://www.quantmod.com/)
-- [DuckDB Guide](https://duckdb.org/docs/)
-- [GitHub Pages Setup](https://pages.github.com/)
+```bash
+# 1. Make changes to R/fetch_data.R or index.qmd
 
-## 📋 Next Steps
+# 2. Render the site locally
+Rscript R/render_site.R
 
-1. ✅ Add your desired stock tickers to `R/fetch_data.R`
-2. ✅ Customize styling in `styles.css`
-3. ✅ Create a GitHub repository and enable Pages
-4. ✅ Set up scheduled updates (already configured!)
-5. ✅ Add interactive visualizations with Observable JS
+# 3. Check the output in docs/
 
-## 📄 License
+# 4. Commit and push
+git add .
+git commit -m "Update: [description of changes]"
+git push origin master
 
-MIT - Feel free to fork, modify, and use!
-
----
-
-**Created with**: R, Quarto, DuckDB, and ❤️
+# Site updates immediately without waiting for CI/CD!
+```
