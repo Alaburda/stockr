@@ -42,6 +42,22 @@ Add these repository secrets before enabling deployment:
 
 The workflow deploys the `app` directory on pushes to `master` and on manual dispatch.
 
+For local deployments, use an explicit CRAN repo before calling `rsconnect::deployApp()` so the generated manifest does not contain unsupported `RSPM/...` source URLs:
+
+```r
+options(repos = c(CRAN = "https://cloud.r-project.org"))
+rsconnect::setAccountInfo(
+	name = Sys.getenv("SHINYAPPS_ACCOUNT"),
+	token = Sys.getenv("SHINYAPPS_TOKEN"),
+	secret = Sys.getenv("SHINYAPPS_SECRET")
+)
+rsconnect::deployApp(
+	appDir = "app",
+	appName = Sys.getenv("SHINYAPPS_APP_NAME"),
+	forceUpdate = TRUE
+)
+```
+
 ## Project Structure
 
 ```text
