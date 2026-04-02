@@ -1,7 +1,6 @@
 # Stockr - Modern Shiny App with bslib UI
 # Live stock analysis using quantmod + plotly
 
-library(cpp11)
 library(shiny)
 library(bslib)
 library(bsicons)

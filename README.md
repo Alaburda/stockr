@@ -40,7 +40,7 @@ Add these repository secrets before enabling deployment:
 - `SHINYAPPS_SECRET`
 - `SHINYAPPS_APP_NAME`
 
-The workflow deploys the `app` directory on pushes to `main` and on manual dispatch.
+The workflow deploys the `app` directory on pushes to `master` and on manual dispatch.
 
 ## Project Structure
 
