@@ -10,10 +10,10 @@ _freeze/
 *.knit.md
 .quarto/
 
-# Data
-# Keep the database for deployment, but ignore local R cache
+# Local R state
 .Rdata
 .Rdebug
+app/*.duckdb
 
 # OS
 .DS_Store
