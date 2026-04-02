@@ -1,5 +1,7 @@
 # Stockr
 
+[![Deploy To shinyapps.io](https://github.com/Alaburda/stockr/actions/workflows/deploy-shinyapps.yml/badge.svg)](https://github.com/Alaburda/stockr/actions/workflows/deploy-shinyapps.yml)
+
 Stockr is an R Shiny app for stock analysis with technical overlays, momentum indicators, dashboard summaries, and a parabolic short scanner.
 
 ## Features

@@ -3,7 +3,9 @@ name: Deploy To shinyapps.io
 on:
   push:
     branches:
-      - main
+      - master
+    paths:
+      - app/**
   workflow_dispatch:
 
 jobs:
