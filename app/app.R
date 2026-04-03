@@ -333,7 +333,7 @@ ui <- page_navbar(
     )
   ),
   nav_panel(
-    title = "Parabolic Short",
+    title = "Latest Move",
     icon = bs_icon("lightning-charge"),
     layout_sidebar(
       sidebar = sidebar(
@@ -375,7 +375,7 @@ ui <- page_navbar(
         col_widths = c(12),
         card(
           card_header(
-            tags$span(bs_icon("speedometer2"), " Parabolic Short Setup Scores")
+            tags$span(bs_icon("speedometer2"), " Latest Move Setup Scores")
           ),
           card_body(
             DTOutput("parabolic_table")
@@ -1684,7 +1684,11 @@ server <- function(input, output, session) {
         VolumeExp = NA,
         ClimaxGap = NA,
         Score = NA,
-        Grade = "No Data"
+        Grade = "No Data",
+        ChangeLastDay = NA_real_,
+        VolumeTrend = NA_character_,
+        PctFromSMA200 = NA_real_,
+        stringsAsFactors = FALSE
       ))
     }
 
@@ -1757,6 +1761,31 @@ server <- function(input, output, session) {
              else if (score >= 3) "C (Weak)"
              else "D (Not Ready)"
 
+    # --- New metrics ---
+
+    # Change from last day (% change of most recent close vs previous close)
+    change_last_day <- if (!is.na(closes[lb]) && !is.na(prev_closes[lb]) && prev_closes[lb] != 0) {
+      (closes[lb] - prev_closes[lb]) / prev_closes[lb] * 100
+    } else NA_real_
+
+    # Volume trend: compare average of last 3 days vs average of first 2 days in window
+    vol_trend <- if (lb >= 3) {
+      avg_recent_vol <- mean(tail(volumes, 3), na.rm = TRUE)
+      avg_early_vol  <- mean(head(volumes, max(1, lb - 3)), na.rm = TRUE)
+      if (!is.na(avg_recent_vol) && !is.na(avg_early_vol) && avg_early_vol > 0) {
+        pct_diff <- (avg_recent_vol - avg_early_vol) / avg_early_vol * 100
+        if (pct_diff > 10) "Rising" else if (pct_diff < -10) "Falling" else "Flat"
+      } else NA_character_
+    } else NA_character_
+
+    # % above/below 200-day SMA
+    sma200_val <- if (n >= 200) {
+      mean(as.numeric(Cl(xt[(n - 199):n])), na.rm = TRUE)
+    } else NA_real_
+    pct_from_sma200 <- if (!is.na(sma200_val) && sma200_val > 0) {
+      (closes[lb] / sma200_val - 1) * 100
+    } else NA_real_
+
     data.frame(
       Ticker = sym,
       Date = as.character(dates[lb]),
@@ -1767,6 +1796,9 @@ server <- function(input, output, session) {
       ClimaxGap = ifelse(climax_gap, "Yes", "No"),
       Score = score,
       Grade = grade,
+      ChangeLastDay = change_last_day,
+      VolumeTrend = vol_trend,
+      PctFromSMA200 = pct_from_sma200,
       stringsAsFactors = FALSE
     )
   }
@@ -1783,7 +1815,7 @@ server <- function(input, output, session) {
     })
   })
 
-  # Parabolic summary table
+  # Latest Move summary table
   output$parabolic_table <- renderDT({
     df <- parabolic_data()
     req(df)
@@ -1809,8 +1841,23 @@ server <- function(input, output, session) {
     display_df$ClimaxGap <- ifelse(df$ClimaxGap == "Yes", "Yes ✅", "No ❌")
     display_df$Score <- paste0(df$Score, "/10")
 
+    # Format new columns
+    display_df$ChangeLastDay <- ifelse(
+      is.na(df$ChangeLastDay), "-",
+      paste0(ifelse(df$ChangeLastDay >= 0, "+", ""), round(df$ChangeLastDay, 2), "%")
+    )
+    display_df$VolumeTrend <- ifelse(
+      is.na(df$VolumeTrend), "-",
+      ifelse(df$VolumeTrend == "Rising", "Rising ✅",
+             ifelse(df$VolumeTrend == "Falling", "Falling ❌", "Flat ➡️"))
+    )
+    display_df$PctFromSMA200 <- ifelse(
+      is.na(df$PctFromSMA200), "-",
+      paste0(ifelse(df$PctFromSMA200 >= 0, "+", ""), round(df$PctFromSMA200, 2), "%")
+    )
+
     # Rename columns for display
-    names(display_df) <- c("Ticker", "Date", "Up Days", "Gap Ups", "Range Exp", "Vol Exp", "Climax Gap", "Score", "Grade")
+    names(display_df) <- c("Ticker", "Date", "Up Days", "Gap Ups", "Range Exp", "Vol Exp", "Climax Gap", "Score", "Grade", "Chg (1d)", "Vol Trend", "vs SMA200")
 
     # Sort by score descending
     display_df <- display_df[order(-df$Score), ]
