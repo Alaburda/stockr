@@ -1769,9 +1769,9 @@ server <- function(input, output, session) {
     } else NA_real_
 
     # Volume trend: compare average of last 3 days vs average of first 2 days in window
-    vol_trend <- if (lb >= 3) {
+    vol_trend <- if (lb >= 5) {
       avg_recent_vol <- mean(tail(volumes, 3), na.rm = TRUE)
-      avg_early_vol  <- mean(head(volumes, max(1, lb - 3)), na.rm = TRUE)
+      avg_early_vol  <- mean(head(volumes, 2), na.rm = TRUE)
       if (!is.na(avg_recent_vol) && !is.na(avg_early_vol) && avg_early_vol > 0) {
         pct_diff <- (avg_recent_vol - avg_early_vol) / avg_early_vol * 100
         if (pct_diff > 10) "Rising" else if (pct_diff < -10) "Falling" else "Flat"
