@@ -333,7 +333,7 @@ ui <- page_navbar(
     )
   ),
   nav_panel(
-    title = "Parabolic Short",
+    title = "Latest Move",
     icon = bs_icon("lightning-charge"),
     layout_sidebar(
       sidebar = sidebar(
@@ -375,7 +375,7 @@ ui <- page_navbar(
         col_widths = c(12),
         card(
           card_header(
-            tags$span(bs_icon("speedometer2"), " Parabolic Short Setup Scores")
+            tags$span(bs_icon("speedometer2"), " Latest Move Setup Scores")
           ),
           card_body(
             DTOutput("parabolic_table")
@@ -1371,11 +1371,13 @@ server <- function(input, output, session) {
       return(list(
         Ticker = sym,
         Price = NA_real_,
+        ChangeLastDay = NA_real_,
         Vol_Above_VMA = NA,
         Above_Ichimoku = NA,
         SMA13_Above_SMA30 = NA,
         Price_SD_Spark = list(c(NA_real_)),
         Pct_Above_SMA200 = NA_real_,
+        VolPctFromSMA50 = NA_real_,
         ATR_Extension = NA_real_
       ))
     }
@@ -1451,6 +1453,7 @@ server <- function(input, output, session) {
     sma50 <- sma(close_vec, 50)
     sma200 <- if (n >= 200) sma(close_vec, 200) else rep(NA, n)
     vol_ma20 <- sma(vol_vec, 20)
+    vol_ma50 <- sma(vol_vec, 50)
     price_sd20 <- run_sd(close_vec, 20)
     atr14 <- calc_atr(high_vec, low_vec, close_vec, 14)
     
@@ -1464,6 +1467,7 @@ server <- function(input, output, session) {
     price <- close_vec[target_idx]
     vol <- vol_vec[target_idx]
     vol_ma <- vol_ma20[target_idx]
+    vol_ma50_val <- vol_ma50[target_idx]
     sma13_val <- sma13[target_idx]
     sma30_val <- sma30[target_idx]
     sma50_val <- sma50[target_idx]
@@ -1478,9 +1482,21 @@ server <- function(input, output, session) {
     above_ichimoku <- if (!is.na(price) && !is.na(cloud_top)) price > cloud_top else NA
     sma13_above_sma30 <- if (!is.na(sma13_val) && !is.na(sma30_val)) sma13_val > sma30_val else NA
     
+    # Change from last day
+    prev_idx <- target_idx - 1
+    prev_price <- if (prev_idx >= 1) close_vec[prev_idx] else NA_real_
+    change_last_day <- if (!is.na(price) && !is.na(prev_price) && prev_price != 0) {
+      (price - prev_price) / prev_price * 100
+    } else NA_real_
+    
     # Pct above SMA200
     pct_above_sma200 <- if (!is.na(price) && !is.na(sma200_val) && sma200_val > 0) {
       ((price / sma200_val) - 1) * 100
+    } else NA_real_
+    
+    # Volume % from 50-day SMA
+    vol_pct_from_sma50 <- if (!is.na(vol) && !is.na(vol_ma50_val) && vol_ma50_val > 0) {
+      (vol / vol_ma50_val - 1) * 100
     } else NA_real_
     
     # ATR% Extension
@@ -1497,11 +1513,13 @@ server <- function(input, output, session) {
     list(
       Ticker = sym,
       Price = as.numeric(price),
+      ChangeLastDay = as.numeric(change_last_day),
       Vol_Above_VMA = vol_above_vma,
       Above_Ichimoku = above_ichimoku,
       SMA13_Above_SMA30 = sma13_above_sma30,
       Price_SD_Spark = list(as.numeric(spark_data)),
       Pct_Above_SMA200 = as.numeric(pct_above_sma200),
+      VolPctFromSMA50 = as.numeric(vol_pct_from_sma50),
       ATR_Extension = as.numeric(atr_extension)
     )
   }
@@ -1519,10 +1537,12 @@ server <- function(input, output, session) {
       df <- data.frame(
         Ticker = sapply(results, `[[`, "Ticker"),
         Price = sapply(results, `[[`, "Price"),
+        ChangeLastDay = sapply(results, `[[`, "ChangeLastDay"),
         Vol_Above_VMA = sapply(results, `[[`, "Vol_Above_VMA"),
         Above_Ichimoku = sapply(results, `[[`, "Above_Ichimoku"),
         SMA13_Above_SMA30 = sapply(results, `[[`, "SMA13_Above_SMA30"),
         Pct_Above_SMA200 = sapply(results, `[[`, "Pct_Above_SMA200"),
+        VolPctFromSMA50 = sapply(results, `[[`, "VolPctFromSMA50"),
         ATR_Extension = sapply(results, `[[`, "ATR_Extension"),
         stringsAsFactors = FALSE
       )
@@ -1552,16 +1572,20 @@ server <- function(input, output, session) {
     df$SMA13_Above_SMA30 <- format_bool(df$SMA13_Above_SMA30)
     
     # Build gt table
-    gt_tbl <- df %>%
+    gt_tbl <- df[, c("Ticker", "Price", "ChangeLastDay", "Pct_Above_SMA200", "VolPctFromSMA50",
+                     "Vol_Above_VMA", "Above_Ichimoku", "SMA13_Above_SMA30", "ATR_Extension",
+                     "Price_SD_Spark")] %>%
       gt() %>%
       cols_label(
         Ticker = "Ticker",
         Price = "Price",
+        ChangeLastDay = "Chg (1d)",
         Vol_Above_VMA = "Vol > VMA",
         Above_Ichimoku = "Above Cloud",
         SMA13_Above_SMA30 = "SMA13 > SMA30",
         Price_SD_Spark = "Price σ (60d)",
-        Pct_Above_SMA200 = "% Above SMA200",
+        Pct_Above_SMA200 = "% vs SMA200",
+        VolPctFromSMA50 = "Vol % vs SMA50",
         ATR_Extension = "ATR Ext"
       ) %>%
       fmt_currency(
@@ -1570,8 +1594,50 @@ server <- function(input, output, session) {
         decimals = 2
       ) %>%
       fmt_number(
-        columns = c("Pct_Above_SMA200", "ATR_Extension"),
+        columns = "ATR_Extension",
         decimals = 2
+      ) %>%
+      text_transform(
+        locations = cells_body(columns = "ChangeLastDay"),
+        fn = function(x) {
+          vals <- as.numeric(x)
+          ifelse(
+            is.na(vals), "—",
+            ifelse(
+              vals >= 0,
+              paste0('<span style="color:#18bc9c;font-weight:bold;">+', round(vals, 2), '%</span>'),
+              paste0('<span style="color:#e74c3c;font-weight:bold;">', round(vals, 2), '%</span>')
+            )
+          )
+        }
+      ) %>%
+      text_transform(
+        locations = cells_body(columns = "Pct_Above_SMA200"),
+        fn = function(x) {
+          vals <- as.numeric(x)
+          ifelse(
+            is.na(vals), "—",
+            ifelse(
+              vals >= 0,
+              paste0('<span style="color:#18bc9c;">+', round(vals, 2), '%</span>'),
+              paste0('<span style="color:#e74c3c;">', round(vals, 2), '%</span>')
+            )
+          )
+        }
+      ) %>%
+      text_transform(
+        locations = cells_body(columns = "VolPctFromSMA50"),
+        fn = function(x) {
+          vals <- as.numeric(x)
+          ifelse(
+            is.na(vals), "—",
+            ifelse(
+              vals >= 0,
+              paste0('<span style="color:#18bc9c;">+', round(vals, 2), '%</span>'),
+              paste0('<span style="color:#e74c3c;">', round(vals, 2), '%</span>')
+            )
+          )
+        }
       ) %>%
       gt_plt_sparkline(
         column = "Price_SD_Spark",
@@ -1583,16 +1649,27 @@ server <- function(input, output, session) {
       cols_width(
         Ticker ~ px(80),
         Price ~ px(90),
+        ChangeLastDay ~ px(90),
         Vol_Above_VMA ~ px(80),
         Above_Ichimoku ~ px(90),
         SMA13_Above_SMA30 ~ px(100),
         Price_SD_Spark ~ px(70),
-        Pct_Above_SMA200 ~ px(120),
+        Pct_Above_SMA200 ~ px(110),
+        VolPctFromSMA50 ~ px(110),
         ATR_Extension ~ px(80)
       ) %>%
       cols_align(
         align = "center",
-        columns = c("Vol_Above_VMA", "Above_Ichimoku", "SMA13_Above_SMA30")
+        columns = c("ChangeLastDay", "Vol_Above_VMA", "Above_Ichimoku", "SMA13_Above_SMA30",
+                    "Pct_Above_SMA200", "VolPctFromSMA50")
+      ) %>%
+      tab_spanner(
+        label = "Key Technicals",
+        columns = c("Price", "ChangeLastDay", "Pct_Above_SMA200", "VolPctFromSMA50")
+      ) %>%
+      tab_spanner(
+        label = "Signals",
+        columns = c("Vol_Above_VMA", "Above_Ichimoku", "SMA13_Above_SMA30", "ATR_Extension")
       ) %>%
       tab_style(
         style = cell_fill(color = "#f8f9fa"),
@@ -1684,7 +1761,11 @@ server <- function(input, output, session) {
         VolumeExp = NA,
         ClimaxGap = NA,
         Score = NA,
-        Grade = "No Data"
+        Grade = "No Data",
+        ChangeLastDay = NA_real_,
+        VolumeTrend = NA_character_,
+        PctFromSMA200 = NA_real_,
+        stringsAsFactors = FALSE
       ))
     }
 
@@ -1757,6 +1838,31 @@ server <- function(input, output, session) {
              else if (score >= 3) "C (Weak)"
              else "D (Not Ready)"
 
+    # --- New metrics ---
+
+    # Change from last day (% change of most recent close vs previous close)
+    change_last_day <- if (!is.na(closes[lb]) && !is.na(prev_closes[lb]) && prev_closes[lb] != 0) {
+      (closes[lb] - prev_closes[lb]) / prev_closes[lb] * 100
+    } else NA_real_
+
+    # Volume trend: compare average of last 3 days vs average of first 2 days in window
+    vol_trend <- if (lb >= 5) {
+      avg_recent_vol <- mean(tail(volumes, 3), na.rm = TRUE)
+      avg_early_vol  <- mean(head(volumes, 2), na.rm = TRUE)
+      if (!is.na(avg_recent_vol) && !is.na(avg_early_vol) && avg_early_vol > 0) {
+        pct_diff <- (avg_recent_vol - avg_early_vol) / avg_early_vol * 100
+        if (pct_diff > 10) "Rising" else if (pct_diff < -10) "Falling" else "Flat"
+      } else NA_character_
+    } else NA_character_
+
+    # % above/below 200-day SMA
+    sma200_val <- if (n >= 200) {
+      mean(as.numeric(Cl(xt[(n - 199):n])), na.rm = TRUE)
+    } else NA_real_
+    pct_from_sma200 <- if (!is.na(sma200_val) && sma200_val > 0) {
+      (closes[lb] / sma200_val - 1) * 100
+    } else NA_real_
+
     data.frame(
       Ticker = sym,
       Date = as.character(dates[lb]),
@@ -1767,6 +1873,9 @@ server <- function(input, output, session) {
       ClimaxGap = ifelse(climax_gap, "Yes", "No"),
       Score = score,
       Grade = grade,
+      ChangeLastDay = change_last_day,
+      VolumeTrend = vol_trend,
+      PctFromSMA200 = pct_from_sma200,
       stringsAsFactors = FALSE
     )
   }
@@ -1783,7 +1892,7 @@ server <- function(input, output, session) {
     })
   })
 
-  # Parabolic summary table
+  # Latest Move summary table
   output$parabolic_table <- renderDT({
     df <- parabolic_data()
     req(df)
@@ -1809,8 +1918,23 @@ server <- function(input, output, session) {
     display_df$ClimaxGap <- ifelse(df$ClimaxGap == "Yes", "Yes ✅", "No ❌")
     display_df$Score <- paste0(df$Score, "/10")
 
+    # Format new columns
+    display_df$ChangeLastDay <- ifelse(
+      is.na(df$ChangeLastDay), "-",
+      paste0(ifelse(df$ChangeLastDay >= 0, "+", ""), round(df$ChangeLastDay, 2), "%")
+    )
+    display_df$VolumeTrend <- ifelse(
+      is.na(df$VolumeTrend), "-",
+      ifelse(df$VolumeTrend == "Rising", "Rising ✅",
+             ifelse(df$VolumeTrend == "Falling", "Falling ❌", "Flat ➡️"))
+    )
+    display_df$PctFromSMA200 <- ifelse(
+      is.na(df$PctFromSMA200), "-",
+      paste0(ifelse(df$PctFromSMA200 >= 0, "+", ""), round(df$PctFromSMA200, 2), "%")
+    )
+
     # Rename columns for display
-    names(display_df) <- c("Ticker", "Date", "Up Days", "Gap Ups", "Range Exp", "Vol Exp", "Climax Gap", "Score", "Grade")
+    names(display_df) <- c("Ticker", "Date", "Up Days", "Gap Ups", "Range Exp", "Vol Exp", "Climax Gap", "Score", "Grade", "Chg (1d)", "Vol Trend", "vs SMA200")
 
     # Sort by score descending
     display_df <- display_df[order(-df$Score), ]
