@@ -78,7 +78,14 @@ def main() -> int:
         print("ERROR: Yahoo returned nothing for the whole universe.", file=sys.stderr)
         return 1
 
-    # Trim each ticker to its most recent LOOKBACK_DAYS bars.
+    # One row per (ticker, date), then trim to the most recent LOOKBACK_DAYS.
+    # The upstream feed has been seen to return a duplicated bar, which shifts
+    # every rolling window and lookback for that ticker.
+    before = len(df)
+    df = df.drop_duplicates(subset=["ticker", "date"], keep="last")
+    if len(df) < before:
+        print(f"Dropped {before - len(df)} duplicate (ticker, date) rows")
+
     df = (df.sort_values(["ticker", "date"])
             .groupby("ticker", group_keys=False)
             .tail(LOOKBACK_DAYS))
@@ -102,6 +109,12 @@ def main() -> int:
         "requested": len(symbols),
         "ok": len(got),
         "missing": missing,
+        # Bar counts and the benchmark calendar make a build reproducible after
+        # the fact: if the published page ever disagrees with a local render,
+        # comparing these says immediately whether the upstream feed handed the
+        # two runs different history.
+        "bars_per_ticker": df.groupby("ticker").size().sort_index().to_dict(),
+        "calendar_len": int((df["ticker"] == "SPY").sum()),
         "groups": groups,
         # The RS boards render these sections by explicit ticker list.
         "dashboard_groups": DASHBOARD_GROUPS,

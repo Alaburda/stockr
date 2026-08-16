@@ -55,6 +55,23 @@ text the Streamlit app shows; there is no second copy to keep in sync.
 Hover tooltips are desktop-only (phones have no hover state), which is why the
 page also carries a full **Glossary** section at the bottom.
 
+### Returns are anchored to the benchmark calendar
+
+`board._ret` measures every return over **SPY's** last N trading sessions, not
+over N rows of the ticker's own series, and takes the last close on or before
+that reference date.
+
+This matters more than it sounds. 12 of the 78 tickers don't share SPY's
+calendar — `DX-Y.NYB` has *more* bars (the dollar trades when equities don't),
+`WGMI` and `GTLB` fewer, `NBIS`/`RDDT` are recent listings. Counting 22 rows
+back in each series therefore compared *different date ranges* against SPY's,
+which silently corrupted RS: `WGMI`'s RS 1M was wrong by 9.3 percentage
+points, `XLRE` and `RSPR` by ~2pp.
+
+`meta.json` records `bars_per_ticker` and `calendar_len` so that if the
+published page ever disagrees with a local render, comparing those two says
+straight away whether the upstream feed gave the runs different history.
+
 ### The setup score
 
 The `n/6` badge is the app's A-setup checklist: ATR ext < 4x, LoD dist < 0.6

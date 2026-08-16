@@ -35,9 +35,27 @@ BENCH = "SPY"
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
-def _ret(s: pd.Series, n: int) -> float:
-    a = s.to_numpy()
-    return a[-1] / a[-1 - n] - 1 if len(a) > n and a[-1 - n] else np.nan
+def _ret(s: pd.Series, cal: pd.DatetimeIndex, n: int) -> float:
+    """Return over the benchmark's last `n` sessions.
+
+    Anchored to the benchmark calendar rather than counting rows back in the
+    ticker's own series. A positional lookback assumes every ticker has exactly
+    one row per trading day: a duplicated or missing bar shifts the window
+    silently, and — because the ticker's 22nd-back row would then be a
+    different date than the benchmark's — it corrupts every RS number without
+    changing close, 1D or 1W, which is exactly how this surfaced in CI.
+
+    `s` is indexed by date. The reference is the last close on or before the
+    benchmark's reference date, so a ticker that didn't trade that day still
+    measures the same span.
+    """
+    if s.empty or len(cal) <= n:
+        return np.nan
+    prior = s.loc[:cal[-1 - n]]
+    if prior.empty:
+        return np.nan
+    base = prior.iloc[-1]
+    return s.iloc[-1] / base - 1 if base else np.nan
 
 
 def _ytd(g: pd.DataFrame) -> float:
@@ -108,16 +126,22 @@ def latest_metrics(px: pd.DataFrame, bench: str = BENCH) -> pd.DataFrame:
 
     Mirrors v_latest + v_perf + v_rs_spy + v_ma_matrix in a single pass.
     """
-    px = px.sort_values(["ticker", "date"])
+    # One row per (ticker, date). A duplicated bar from the upstream feed would
+    # otherwise shift every rolling window and lookback for that ticker.
+    px = (px.drop_duplicates(subset=["ticker", "date"], keep="last")
+            .sort_values(["ticker", "date"]))
+
     bg = px[px["ticker"] == bench]
-    bench_ret = {k: _ret(bg["close"], n) for k, n in HORIZONS.items()}
+    cal = pd.DatetimeIndex(bg["date"])  # the trading calendar everything measures against
+    bench_close = bg.set_index("date")["close"]
+    bench_ret = {k: _ret(bench_close, cal, n) for k, n in HORIZONS.items()}
 
     rows = []
     for tk, g in px.groupby("ticker", sort=False):
         g = g.dropna(subset=["close"])
         if len(g) < 2:
             continue
-        c, last = g["close"], g.iloc[-1]
+        c, last = g.set_index("date")["close"], g.iloc[-1]
 
         rec: dict = {
             "ticker": tk,
@@ -130,11 +154,11 @@ def latest_metrics(px: pd.DataFrame, bench: str = BENCH) -> pd.DataFrame:
             "pct_ema8": last.get("pct_ema8"),
             "sma10": last.get("sma10"),
             "sma20": last.get("sma20"),
-            "ret_1d": _ret(c, 1),
+            "ret_1d": _ret(c, cal, 1),
             "ret_ytd": _ytd(g),
         }
         for k, n in HORIZONS.items():
-            rec[f"ret_{k}"] = _ret(c, n)
+            rec[f"ret_{k}"] = _ret(c, cal, n)
 
         hi52 = g["high"].tail(252).max()
         rec["pct_off_52w"] = (last["close"] / hi52 - 1) * 100 if hi52 else np.nan
