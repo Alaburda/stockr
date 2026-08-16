@@ -20,6 +20,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pandas as pd
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "app" / "streamlit"))
 
@@ -27,7 +29,7 @@ from lib.config import (  # noqa: E402
     DASHBOARD_GROUPS, DASHBOARD_NAMES, DASHBOARD_TICKERS,
     DEFAULT_ETFS, DEFAULT_INDICES, DEFAULT_WATCHLIST,
 )
-from lib.fetch import fetch_bulk  # noqa: E402
+from lib.fetch import fetch_bulk, fetch_ticker  # noqa: E402
 
 # How much history each ticker keeps. 5y so the weekly and monthly candle views
 # have real depth (260 daily bars is only ~12 monthly candles). The CSV is never
@@ -40,6 +42,11 @@ LOOKBACK_DAYS = 1300
 # build rather than publish a board with half the watchlist silently missing —
 # yesterday's page staying up is more useful than a misleading fresh one.
 MIN_COVERAGE = 0.8
+
+# Tickers the page's market strip is built from. Losing one of these doesn't
+# trip MIN_COVERAGE — 77/78 is 99% — it just silently deletes a tile from the
+# published board, which is worse than an obvious failure. So they're required.
+REQUIRED = ["SPY", "QQQ", "^VIX", "^VIX3M", "^TNX", "DX-Y.NYB", "RSP", "TLT"]
 
 # Columns the site actually reads. Everything else is dropped from the CSV.
 KEEP = [
@@ -67,6 +74,41 @@ def universe() -> dict[str, list[str]]:
     }
 
 
+def backfill(df: "pd.DataFrame", symbols: list[str], bench: str = "SPY") -> "pd.DataFrame":
+    """Re-request tickers the bulk download dropped or returned short.
+
+    Yahoo's bulk endpoint is markedly less reliable from a datacenter IP than
+    from a laptop. The same call that returned 78/78 complete series locally
+    came back from GitHub Actions with ^VIX3M missing entirely and 38 tickers
+    gapped — which silently removed the VIX3M/VIX stress tile from the
+    published page while the coverage guard still read 77/78 and passed.
+
+    Requesting the stragglers one at a time uses a different endpoint and
+    usually fills them in. Tickers with genuinely short history (recent
+    listings like NBIS/RDDT) get retried too and simply come back the same
+    length, which costs a request and changes nothing.
+    """
+    counts = df.groupby("ticker").size()
+    target_len = int(counts.get(bench, counts.max() if len(counts) else 0))
+    short = [s for s in symbols
+             if s not in counts.index or int(counts[s]) < target_len]
+    if not short:
+        return df
+
+    print(f"Backfilling {len(short)} incomplete/missing tickers "
+          f"(benchmark has {target_len} bars)...", flush=True)
+    fixed = 0
+    for sym in short:
+        one = fetch_ticker(sym, period=FETCH_PERIOD)
+        if one is None or one.empty:
+            continue
+        if len(one) > int(counts.get(sym, 0)):
+            df = pd.concat([df[df["ticker"] != sym], one], ignore_index=True)
+            fixed += 1
+    print(f"  backfill improved {fixed} of {len(short)}")
+    return df
+
+
 def main() -> int:
     groups = universe()
     symbols = sorted({t for g in groups.values() for t in g})
@@ -77,6 +119,8 @@ def main() -> int:
     if df.empty:
         print("ERROR: Yahoo returned nothing for the whole universe.", file=sys.stderr)
         return 1
+
+    df = backfill(df, symbols)
 
     # One row per (ticker, date), then trim to the most recent LOOKBACK_DAYS.
     # The upstream feed has been seen to return a duplicated bar, which shifts
@@ -127,6 +171,13 @@ def main() -> int:
     print(f"Last bar {meta['last_bar']}; {len(got)}/{len(symbols)} tickers OK")
     if missing:
         print(f"Missing: {', '.join(missing)}")
+
+    absent = [t for t in REQUIRED if t not in set(got)]
+    if absent:
+        print(f"ERROR: required ticker(s) missing: {', '.join(absent)}. These build "
+              f"the market strip; publishing without them would quietly drop tiles.",
+              file=sys.stderr)
+        return 1
 
     coverage = len(got) / len(symbols)
     if coverage < MIN_COVERAGE:

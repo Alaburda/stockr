@@ -104,6 +104,23 @@ The fetch fails the build if fewer than 80% of tickers return data
 (`MIN_COVERAGE`), so a bad Yahoo night leaves yesterday's page up instead of
 publishing a board that's silently half empty.
 
+### Yahoo is less reliable from CI than from a laptop
+
+Yahoo's bulk endpoint degrades noticeably from datacenter IPs. A run that
+returned 78/78 complete series locally came back from GitHub Actions with
+`^VIX3M` missing entirely and 38 tickers gapped — which silently deleted the
+VIX3M/VIX stress tile from the published page while coverage read 77/78 and
+passed. Two defences:
+
+- `backfill()` re-requests any dropped or short ticker one at a time, which
+  uses a different endpoint and usually fills them in. It's a no-op locally.
+- `REQUIRED` lists the tickers the market strip is built from. Losing one
+  never trips a percentage-based guard, so those fail the build outright —
+  yesterday's page staying up beats today's page quietly missing a signal.
+
+If a build fails on `REQUIRED`, that's Yahoo, not the code. Re-run the
+workflow; the site keeps serving the last good page meanwhile.
+
 ## Candle timeframes
 
 The Daily / Weekly / Monthly switch is computed at build time: `timeframe_frame`
