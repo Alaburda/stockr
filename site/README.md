@@ -40,9 +40,32 @@ The ticker universe comes from `app/streamlit/lib/config.py`
 (`DEFAULT_WATCHLIST`, `DEFAULT_ETFS`, `DEFAULT_INDICES`) — edit there and both
 the app and the site follow.
 
-2 years of history are pulled (so the 200-day SMA is warm) and the last 260
-bars per ticker are written to the CSV. The CSV is not published — Quarto reads
-it at render time and bakes the numbers into `index.html`.
+5 years of history are pulled and the last 1300 bars per ticker are written to
+the CSV — the weekly and monthly candle views need that depth (260 daily bars
+is only ~12 monthly candles). The CSV is not published; Quarto reads it at
+render time and bakes the numbers into `index.html`.
+
+The fetch fails the build if fewer than 80% of tickers return data
+(`MIN_COVERAGE`), so a bad Yahoo night leaves yesterday's page up instead of
+publishing a board that's silently half empty.
+
+## Candle timeframes
+
+The Daily / Weekly / Monthly switch is computed at build time: `timeframe_frame`
+resamples the daily OHLC and **recomputes** the moving averages on the new
+timeframe, so a 10-period MA means 10 weeks on the weekly chart. All three sets
+of traces ship in the figure and `timeframe_switch` toggles their visibility —
+no server, and it works offline.
+
+The switch uses plain HTML buttons rather than Plotly's `updatemenus`, whose
+buttons are locked to ~33px tall (under the touch-target guideline) and eat
+chart height by sitting inside the plot.
+
+## Mobile
+
+The page is checked at 375px: it must never scroll sideways as a whole. Wide
+tables scroll inside their own `.table-wrap` container with the ticker column
+pinned via `position: sticky`. If you add a table, wrap it the same way.
 
 ## Schedule
 

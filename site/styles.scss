@@ -2,42 +2,59 @@
 $font-size-root: 15px;
 
 /*-- scss:rules --*/
+
+// The page must never scroll sideways as a whole. Wide content (the tables)
+// scrolls inside its own container instead — see .table-wrap.
+body { overflow-x: hidden; }
+
 .stat-strip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: .6rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: .5rem;
   margin: 1rem 0 1.5rem;
 }
 
 .stat {
-  flex: 1 1 130px;
   border: 1px solid #dfe3e8;
   border-radius: 6px;
-  padding: .55rem .75rem;
+  padding: .5rem .7rem;
   background: #fff;
 }
 
 .stat .label {
-  font-size: .72rem;
+  font-size: .7rem;
   letter-spacing: .04em;
   text-transform: uppercase;
   color: #7b8794;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .stat .value {
-  font-size: 1.25rem;
+  font-size: 1.2rem;
   font-weight: 600;
   color: #2c3e50;
   line-height: 1.25;
+  font-variant-numeric: tabular-nums;
 }
 
-.stat .delta { font-size: .82rem; font-weight: 500; }
+.stat .delta { font-size: .8rem; font-weight: 500; }
 .up   { color: #18bc9c; }
 .down { color: #e74c3c; }
 
+// Horizontal scroll lives here, not on the page. -webkit-overflow-scrolling
+// gives iOS momentum scrolling.
+.table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin-bottom: .5rem;
+}
+
 table.board {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate; // sticky cells need separate borders to paint right
+  border-spacing: 0;
   font-variant-numeric: tabular-nums;
   font-size: .88rem;
 }
@@ -46,11 +63,12 @@ table.board th {
   text-align: right;
   border-bottom: 2px solid #2c3e50;
   padding: .35rem .5rem;
-  font-size: .72rem;
+  font-size: .7rem;
   text-transform: uppercase;
   letter-spacing: .03em;
   color: #52606d;
   white-space: nowrap;
+  background: #fff;
 }
 
 table.board td {
@@ -58,11 +76,91 @@ table.board td {
   padding: .3rem .5rem;
   border-bottom: 1px solid #eceff1;
   white-space: nowrap;
+  background: #fff;
 }
 
+// Keep the ticker visible while the numbers scroll under it.
 table.board th:first-child,
-table.board td:first-child { text-align: left; font-weight: 600; }
+table.board td:first-child {
+  text-align: left;
+  font-weight: 600;
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  padding-right: .75rem;
+  box-shadow: 1px 0 0 #eceff1;
+}
 
-table.board tbody tr:hover { background: #f5f8fa; }
+table.board thead th:first-child { z-index: 3; }
+
+table.board tbody tr:hover td { background: #f5f8fa; }
 
 .stamp { color: #7b8794; font-size: .82rem; }
+
+// Timeframe switch (Daily / Weekly / Monthly) above a candle chart.
+.tf-switch {
+  display: flex;
+  gap: .35rem;
+  margin: .25rem 0 .5rem;
+}
+
+.tf-switch button {
+  min-height: 44px;          // comfortable touch target
+  padding: 0 .95rem;
+  border: 1px solid #dfe3e8;
+  border-radius: 6px;
+  background: #fff;
+  color: #52606d;
+  font-size: .85rem;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tf-switch button:hover { border-color: #b9c2cc; color: #2c3e50; }
+
+.tf-switch button.active {
+  background: #2c3e50;
+  border-color: #2c3e50;
+  color: #fff;
+}
+
+.tf-switch button:focus-visible {
+  outline: 2px solid #3498db;
+  outline-offset: 2px;
+}
+
+// ── Phones ──────────────────────────────────────────────────────────────────
+@media (max-width: 640px) {
+  .stat-strip {
+    grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+    gap: .4rem;
+    margin: .75rem 0 1.15rem;
+  }
+
+  .stat { padding: .4rem .5rem; }
+  .stat .label { font-size: .62rem; letter-spacing: .02em; }
+  .stat .value { font-size: 1rem; }
+  .stat .delta { font-size: .72rem; }
+
+  table.board { font-size: .78rem; }
+  table.board th { font-size: .62rem; padding: .3rem .4rem; }
+  table.board td { padding: .28rem .4rem; }
+
+  // A hint that the table scrolls, since there's no visible scrollbar on touch.
+  .table-wrap { position: relative; }
+  .table-wrap::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 18px;
+    height: 100%;
+    pointer-events: none;
+    background: linear-gradient(to right, rgba(255, 255, 255, 0), rgba(255, 255, 255, .92));
+  }
+
+  h2 { font-size: 1.25rem; }
+  h3 { font-size: 1.05rem; }
+}

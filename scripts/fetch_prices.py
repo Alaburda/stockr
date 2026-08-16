@@ -26,10 +26,12 @@ sys.path.insert(0, str(ROOT / "app" / "streamlit"))
 from lib.config import DEFAULT_ETFS, DEFAULT_INDICES, DEFAULT_WATCHLIST  # noqa: E402
 from lib.fetch import fetch_bulk  # noqa: E402
 
-# How much history each ticker keeps in the published CSV. 2y is pulled so the
-# 200-day SMA is warm; only the tail is shipped to keep the page small.
-FETCH_PERIOD = "2y"
-LOOKBACK_DAYS = 260
+# How much history each ticker keeps. 5y so the weekly and monthly candle views
+# have real depth (260 daily bars is only ~12 monthly candles). The CSV is never
+# published — Quarto reads it at render time — so its size costs nothing but
+# build seconds.
+FETCH_PERIOD = "5y"
+LOOKBACK_DAYS = 1300
 
 # The job runs unattended at 02:00. If Yahoo is having a bad night, fail the
 # build rather than publish a board with half the watchlist silently missing —

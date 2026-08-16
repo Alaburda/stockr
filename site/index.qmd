@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pandas as pd
 import plotly.graph_objects as go
-from IPython.display import HTML, Markdown
+from IPython.display import HTML, Markdown, display
 
 DATA = Path("data")
 px_all = pd.read_csv(DATA / "prices.csv", parse_dates=["date"])
@@ -79,21 +79,123 @@ if {"^VIX", "^VIX3M"} <= set(last.index):
 HTML(f'<div class="stat-strip">{"".join(cards)}</div>')
 ```
 
+### SPY
+
 ```{python}
-spy = series("SPY").tail(130)
-fig = go.Figure()
-fig.add_trace(go.Candlestick(
-    x=spy["date"], open=spy["open"], high=spy["high"], low=spy["low"], close=spy["close"],
-    increasing_line_color="#18bc9c", decreasing_line_color="#e74c3c", name="SPY"))
-for col, color, width in [("sma10", "#3498db", 1), ("sma20", "#e67e22", 1), ("sma50", "#9b59b6", 1.4)]:
-    fig.add_trace(go.Scatter(x=spy["date"], y=spy[col], mode="lines", name=col.upper(),
-                             line=dict(color=color, width=width)))
-fig.update_layout(
-    title="SPY — 6 months", height=420, margin=dict(l=40, r=20, t=50, b=30),
-    xaxis_rangeslider_visible=False, template="plotly_white",
-    legend=dict(orientation="h", y=1.02, yanchor="bottom"),
-    xaxis=dict(rangebreaks=[dict(bounds=["sat", "mon"])]))
-fig.show()
+# Daily / Weekly / Monthly candles. The site is static, so all three timeframes
+# are computed here and shipped in the figure; Plotly's own buttons swap which
+# set is visible. No custom JS, and it works offline.
+TIMEFRAMES = [("Daily", None, 130), ("Weekly", "W-FRI", 104), ("Monthly", "ME", 60)]
+MA_SPEC = [("sma10", "#3498db", 1.0), ("sma20", "#e67e22", 1.0), ("sma50", "#9b59b6", 1.4)]
+WEEKEND_BREAK = [dict(bounds=["sat", "mon"])]
+
+
+def timeframe_frame(df: pd.DataFrame, rule: str | None, bars: int) -> pd.DataFrame:
+    """OHLC at the requested timeframe, with MAs recomputed on that timeframe.
+
+    A 10-period MA means 10 *weeks* on the weekly chart — resampling the daily
+    MA instead would just be a sampled daily line wearing a weekly label.
+    """
+    if rule is None:
+        out = df.copy()  # daily: MAs already computed by lib.fetch
+    else:
+        out = (df.set_index("date")
+                 .resample(rule)
+                 .agg({"open": "first", "high": "max", "low": "min",
+                       "close": "last", "volume": "sum"})
+                 .dropna(subset=["close"])
+                 .reset_index())
+        for col, _, _ in MA_SPEC:
+            out[col] = out["close"].rolling(int(col.removeprefix("sma"))).mean()
+    return out.tail(bars)
+
+
+def candle_figure(df: pd.DataFrame, name: str, height: int = 400) -> go.Figure:
+    frames = [(label, timeframe_frame(df, rule, bars)) for label, rule, bars in TIMEFRAMES]
+    per_tf = 1 + len(MA_SPEC)
+
+    fig = go.Figure()
+    for i, (_, f) in enumerate(frames):
+        vis = i == 0
+        fig.add_trace(go.Candlestick(
+            x=f["date"], open=f["open"], high=f["high"], low=f["low"], close=f["close"],
+            increasing_line_color="#18bc9c", decreasing_line_color="#e74c3c",
+            name=name, visible=vis, showlegend=False))
+        for col, color, width in MA_SPEC:
+            fig.add_trace(go.Scatter(
+                x=f["date"], y=f[col], mode="lines", name=col.upper(),
+                line=dict(color=color, width=width), visible=vis))
+
+    fig.update_layout(
+        height=height,
+        margin=dict(l=8, r=8, t=34, b=26),
+        template="plotly_white",
+        xaxis_rangeslider_visible=False,
+        xaxis=dict(rangebreaks=WEEKEND_BREAK),
+        yaxis=dict(side="right", tickformat=",.0f"),
+        legend=dict(orientation="h", y=1.0, yanchor="bottom", x=0, xanchor="left",
+                    font=dict(size=11)),
+    )
+    return fig
+
+
+def timeframe_switch(host_id: str) -> str:
+    """Button group + the script that swaps timeframes on the adjacent chart.
+
+    Plotly's own `updatemenus` buttons are locked to ~33px tall regardless of
+    font or padding, which is under the touch-target guideline, and they eat
+    chart height by living inside the plot. Real buttons cost ~15 lines of JS
+    and behave properly on a phone.
+    """
+    per_tf = 1 + len(MA_SPEC)
+    n = len(TIMEFRAMES) * per_tf
+    states = []
+    for i, (label, _, _) in enumerate(TIMEFRAMES):
+        visible = [False] * n
+        for j in range(per_tf):
+            visible[i * per_tf + j] = True
+        # Weekend gaps only exist on the daily axis; keeping the rangebreak on a
+        # weekly/monthly chart would blank out most of the candles.
+        states.append({"visible": visible,
+                       "rangebreaks": WEEKEND_BREAK if i == 0 else []})
+
+    btns = "".join(
+        f'<button type="button" data-tf="{i}"'
+        f'{" class=\"active\"" if i == 0 else ""}>{label}</button>'
+        for i, (label, _, _) in enumerate(TIMEFRAMES))
+
+    return f"""
+<div class="tf-switch" id="{host_id}" role="group" aria-label="Candle timeframe">{btns}</div>
+<script>
+(function () {{
+  var STATES = {json.dumps(states)};
+  var host = document.getElementById({host_id!r});
+  function chart() {{
+    // The chart Quarto renders immediately after this button group.
+    var el = host.parentElement.querySelector('.plotly-graph-div');
+    return el || document.querySelector('.plotly-graph-div');
+  }}
+  function attach() {{
+    var gd = chart();
+    if (!gd || typeof Plotly === 'undefined') return setTimeout(attach, 60);
+    host.addEventListener('click', function (ev) {{
+      var b = ev.target.closest('button[data-tf]');
+      if (!b) return;
+      var s = STATES[+b.dataset.tf];
+      Plotly.update(gd, {{visible: s.visible}}, {{'xaxis.rangebreaks': s.rangebreaks}});
+      host.querySelectorAll('button').forEach(function (x) {{ x.classList.remove('active'); }});
+      b.classList.add('active');
+    }});
+  }}
+  attach();
+}})();
+</script>
+"""
+
+
+display(HTML(timeframe_switch("tf-spy")))
+candle_figure(series("SPY"), "SPY").show(
+    config={"responsive": True, "displayModeBar": False})
 ```
 
 ## Watchlist
@@ -131,8 +233,8 @@ for tkr, row in wl.iterrows():
     gear = "▲" if row["close"] > row["sma20"] and row["close"] > row["sma10"] else ""
     rows.append(f"<tr><td>{tkr} <span class='up'>{gear}</span></td>{''.join(cells)}</tr>")
 
-HTML(f"<table class='board'><thead><tr><th>Ticker</th>{head}</tr></thead>"
-     f"<tbody>{''.join(rows)}</tbody></table>")
+HTML(f"<div class='table-wrap'><table class='board'><thead><tr><th>Ticker</th>{head}</tr>"
+     f"</thead><tbody>{''.join(rows)}</tbody></table></div>")
 ```
 
 ::: {.stamp}
@@ -150,6 +252,7 @@ for tkr, row in etf.iterrows():
         f"<tr><td>{tkr}</td><td>{row['close']:,.2f}</td><td>{signed(row['chg_1d'])}</td>"
         f"<td>{signed(row['chg_1w'])}</td><td>{signed(row['chg_1m'])}</td>"
         f"<td>{row['rsi']:.0f}</td></tr>")
-HTML("<table class='board'><thead><tr><th>Ticker</th><th>Close</th><th>1D</th>"
-     f"<th>1W</th><th>1M</th><th>RSI</th></tr></thead><tbody>{''.join(rows)}</tbody></table>")
+HTML("<div class='table-wrap'><table class='board'><thead><tr><th>Ticker</th><th>Close</th>"
+     "<th>1D</th><th>1W</th><th>1M</th><th>RSI</th></tr></thead>"
+     f"<tbody>{''.join(rows)}</tbody></table></div>")
 ```
