@@ -10,10 +10,22 @@ _freeze/
 *.knit.md
 .quarto/
 
+# Static site build (data is re-fetched on every build, never committed)
+site/_site/
+site/data/
+site/.quarto/
+
 # Local R state
 .Rdata
 .Rdebug
-app/*.duckdb
+
+# DuckDB databases — rebuilt locally, never committed (db/database.duckdb is ~1.5 GB)
+*.duckdb
+*.duckdb.wal
+
+# Python
+__pycache__/
+*.py[cod]
 
 # OS
 .DS_Store

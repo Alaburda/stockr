@@ -1,0 +1,12 @@
+# Deps for the static site build (scripts/fetch_prices.py + site/index.qmd).
+# Deliberately smaller than app/streamlit/requirements.txt — no streamlit, no duckdb.
+yfinance>=0.2.40
+pandas>=2.0
+numpy>=1.26
+plotly>=5.20
+lxml>=5.0
+# Quarto's python engine
+jupyter-client>=8.0
+ipykernel>=6.29
+nbclient>=0.10
+nbformat>=5.10

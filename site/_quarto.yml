@@ -1,0 +1,25 @@
+project:
+  type: website
+  output-dir: _site
+
+website:
+  title: "Stockr"
+  description: "Overnight snapshot of the watchlist"
+  navbar:
+    background: dark
+    left:
+      - href: index.qmd
+        text: Morning Board
+
+format:
+  html:
+    theme: [flatly, styles.scss]
+    toc: false
+    page-layout: full
+    code-tools: false
+    execute:
+      echo: false
+      warning: false
+
+execute:
+  freeze: false

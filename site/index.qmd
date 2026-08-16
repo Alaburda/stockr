@@ -1,0 +1,155 @@
+---
+title: "Morning Board"
+---
+
+```{python}
+# | tags: [setup]
+import json
+from pathlib import Path
+
+import pandas as pd
+import plotly.graph_objects as go
+from IPython.display import HTML, Markdown
+
+DATA = Path("data")
+px_all = pd.read_csv(DATA / "prices.csv", parse_dates=["date"])
+meta = json.loads((DATA / "meta.json").read_text(encoding="utf-8"))
+
+# Last bar per ticker, plus the bar before it (for the 1-day change) and the
+# bar 5 sessions back (for the week change).
+px_all = px_all.sort_values(["ticker", "date"])
+g = px_all.groupby("ticker")
+last = g.tail(1).set_index("ticker")
+def nth_back(n: int) -> pd.Series:
+    """Close n sessions before the last bar, per ticker (NA if not enough history)."""
+    return g["close"].apply(lambda s: s.iloc[-1 - n] if len(s) > n else pd.NA)
+
+
+prev_close, week_close, month_close = nth_back(1), nth_back(5), nth_back(21)
+
+last["chg_1d"] = (last["close"] / prev_close - 1) * 100
+last["chg_1w"] = (last["close"] / week_close - 1) * 100
+last["chg_1m"] = (last["close"] / month_close - 1) * 100
+
+
+def series(ticker: str) -> pd.DataFrame:
+    return px_all[px_all["ticker"] == ticker]
+
+
+def signed(x, dp=2, suffix="%"):
+    if pd.isna(x):
+        return '<span class="stamp">—</span>'
+    cls = "up" if x >= 0 else "down"
+    return f'<span class="{cls}">{x:+.{dp}f}{suffix}</span>'
+```
+
+```{python}
+Markdown(f"<p class='stamp'>Last bar **{meta['last_bar']}** · fetched {meta['fetched_at_utc']} · "
+         f"{meta['ok']}/{meta['requested']} tickers</p>")
+```
+
+## Market
+
+```{python}
+STRIP = [("SPY", "S&P 500"), ("QQQ", "Nasdaq 100"), ("^VIX", "VIX"),
+         ("^VIX3M", "VIX3M"), ("^TNX", "10Y yield"), ("DX-Y.NYB", "Dollar")]
+
+cards = []
+for sym, label in STRIP:
+    if sym not in last.index:
+        continue
+    row = last.loc[sym]
+    cards.append(
+        f'<div class="stat"><div class="label">{label}</div>'
+        f'<div class="value">{row["close"]:,.2f}</div>'
+        f'<div class="delta">{signed(row["chg_1d"])}</div></div>'
+    )
+
+# Volatility stress: VIX3M/VIX below 1 means front-month fear — worth its own tile.
+if {"^VIX", "^VIX3M"} <= set(last.index):
+    ratio = last.loc["^VIX3M", "close"] / last.loc["^VIX", "close"]
+    state = "stressed" if ratio < 1 else "calm"
+    cls = "down" if ratio < 1 else "up"
+    cards.append(
+        f'<div class="stat"><div class="label">VIX3M / VIX</div>'
+        f'<div class="value">{ratio:.2f}</div>'
+        f'<div class="delta {cls}">{state}</div></div>'
+    )
+
+HTML(f'<div class="stat-strip">{"".join(cards)}</div>')
+```
+
+```{python}
+spy = series("SPY").tail(130)
+fig = go.Figure()
+fig.add_trace(go.Candlestick(
+    x=spy["date"], open=spy["open"], high=spy["high"], low=spy["low"], close=spy["close"],
+    increasing_line_color="#18bc9c", decreasing_line_color="#e74c3c", name="SPY"))
+for col, color, width in [("sma10", "#3498db", 1), ("sma20", "#e67e22", 1), ("sma50", "#9b59b6", 1.4)]:
+    fig.add_trace(go.Scatter(x=spy["date"], y=spy[col], mode="lines", name=col.upper(),
+                             line=dict(color=color, width=width)))
+fig.update_layout(
+    title="SPY — 6 months", height=420, margin=dict(l=40, r=20, t=50, b=30),
+    xaxis_rangeslider_visible=False, template="plotly_white",
+    legend=dict(orientation="h", y=1.02, yanchor="bottom"),
+    xaxis=dict(rangebreaks=[dict(bounds=["sat", "mon"])]))
+fig.show()
+```
+
+## Watchlist
+
+```{python}
+COLS = [
+    ("close", "Close", "{:,.2f}"),
+    ("chg_1d", "1D", None),
+    ("chg_1w", "1W", None),
+    ("chg_1m", "1M", None),
+    ("rsi", "RSI", "{:.0f}"),
+    ("sma50_atr_ext", "ATR ext", "{:+.1f}"),
+    ("pct_ema8", "vs 8EMA", None),
+    ("adr", "ADR", None),
+    ("rel_vol", "Rel vol", "{:.2f}"),
+]
+
+wl = last[last["group"] == "watchlist"].sort_values("chg_1d", ascending=False)
+
+head = "".join(f"<th>{label}</th>" for _, label, _ in COLS)
+rows = []
+for tkr, row in wl.iterrows():
+    cells = []
+    for col, _, fmt in COLS:
+        val = row[col]
+        if col == "adr":
+            cells.append(f"<td>{val * 100:.1f}%</td>" if pd.notna(val) else "<td>—</td>")
+        elif fmt is None:
+            cells.append(f"<td>{signed(val)}</td>")
+        elif pd.isna(val):
+            cells.append("<td>—</td>")
+        else:
+            cells.append(f"<td>{fmt.format(val)}</td>")
+    # Trend flags: above both the 10 and 20 SMA is the simple "in gear" read.
+    gear = "▲" if row["close"] > row["sma20"] and row["close"] > row["sma10"] else ""
+    rows.append(f"<tr><td>{tkr} <span class='up'>{gear}</span></td>{''.join(cells)}</tr>")
+
+HTML(f"<table class='board'><thead><tr><th>Ticker</th>{head}</tr></thead>"
+     f"<tbody>{''.join(rows)}</tbody></table>")
+```
+
+::: {.stamp}
+ATR ext = distance from the 50-day SMA measured in ATRs. ADR = average daily
+range as a % of close. Rel vol = volume vs its own 20-day average.
+:::
+
+## ETFs
+
+```{python}
+etf = last[last["group"] == "etf"].sort_values("chg_1d", ascending=False)
+rows = []
+for tkr, row in etf.iterrows():
+    rows.append(
+        f"<tr><td>{tkr}</td><td>{row['close']:,.2f}</td><td>{signed(row['chg_1d'])}</td>"
+        f"<td>{signed(row['chg_1w'])}</td><td>{signed(row['chg_1m'])}</td>"
+        f"<td>{row['rsi']:.0f}</td></tr>")
+HTML("<table class='board'><thead><tr><th>Ticker</th><th>Close</th><th>1D</th>"
+     f"<th>1W</th><th>1M</th><th>RSI</th></tr></thead><tbody>{''.join(rows)}</tbody></table>")
+```

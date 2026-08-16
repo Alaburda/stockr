@@ -1,0 +1,68 @@
+/*-- scss:defaults --*/
+$font-size-root: 15px;
+
+/*-- scss:rules --*/
+.stat-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .6rem;
+  margin: 1rem 0 1.5rem;
+}
+
+.stat {
+  flex: 1 1 130px;
+  border: 1px solid #dfe3e8;
+  border-radius: 6px;
+  padding: .55rem .75rem;
+  background: #fff;
+}
+
+.stat .label {
+  font-size: .72rem;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: #7b8794;
+}
+
+.stat .value {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #2c3e50;
+  line-height: 1.25;
+}
+
+.stat .delta { font-size: .82rem; font-weight: 500; }
+.up   { color: #18bc9c; }
+.down { color: #e74c3c; }
+
+table.board {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+  font-size: .88rem;
+}
+
+table.board th {
+  text-align: right;
+  border-bottom: 2px solid #2c3e50;
+  padding: .35rem .5rem;
+  font-size: .72rem;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  color: #52606d;
+  white-space: nowrap;
+}
+
+table.board td {
+  text-align: right;
+  padding: .3rem .5rem;
+  border-bottom: 1px solid #eceff1;
+  white-space: nowrap;
+}
+
+table.board th:first-child,
+table.board td:first-child { text-align: left; font-weight: 600; }
+
+table.board tbody tr:hover { background: #f5f8fa; }
+
+.stamp { color: #7b8794; font-size: .82rem; }
