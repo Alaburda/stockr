@@ -31,6 +31,11 @@ from lib.fetch import fetch_bulk  # noqa: E402
 FETCH_PERIOD = "2y"
 LOOKBACK_DAYS = 260
 
+# The job runs unattended at 02:00. If Yahoo is having a bad night, fail the
+# build rather than publish a board with half the watchlist silently missing —
+# yesterday's page staying up is more useful than a misleading fresh one.
+MIN_COVERAGE = 0.8
+
 # Columns the site actually reads. Everything else is dropped from the CSV.
 KEEP = [
     "ticker", "date", "open", "high", "low", "close", "volume",
@@ -92,6 +97,13 @@ def main() -> int:
     print(f"Last bar {meta['last_bar']}; {len(got)}/{len(symbols)} tickers OK")
     if missing:
         print(f"Missing: {', '.join(missing)}")
+
+    coverage = len(got) / len(symbols)
+    if coverage < MIN_COVERAGE:
+        print(f"ERROR: only {coverage:.0%} of tickers returned data "
+              f"(need {MIN_COVERAGE:.0%}). Refusing to publish a partial board.",
+              file=sys.stderr)
+        return 1
     return 0
 
 
