@@ -17,9 +17,10 @@ format:
     toc: false
     page-layout: full
     code-tools: false
-    execute:
-      echo: false
-      warning: false
+    # Resizes Plotly charts when their tab becomes visible — see the file.
+    include-after-body: resize-tabs.html
 
 execute:
+  echo: false
+  warning: false
   freeze: false

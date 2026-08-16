@@ -1,0 +1,29 @@
+<script>
+// Plotly measures a chart when it renders. A chart sitting in a tab that isn't
+// the active one renders at Plotly's default 700px and never learns its real
+// width — so on a phone it stays clipped after you tap through to it. Resize
+// whatever became visible.
+(function () {
+  function resizeVisible(root) {
+    if (typeof Plotly === 'undefined') return;
+    (root || document).querySelectorAll('.plotly-graph-div').forEach(function (gd) {
+      if (gd.offsetParent !== null) Plotly.Plots.resize(gd);
+    });
+  }
+
+  // Bootstrap 5 fires this on the tab trigger; capture it at the document.
+  document.addEventListener('shown.bs.tab', function (ev) {
+    var sel = ev.target && ev.target.getAttribute('data-bs-target');
+    resizeVisible(sel ? document.querySelector(sel) : null);
+  }, true);
+
+  // Fallback for tab markup that doesn't emit the Bootstrap event.
+  document.addEventListener('click', function (ev) {
+    if (ev.target.closest && ev.target.closest('.panel-tabset .nav-link, .panel-tabset [role=tab]')) {
+      setTimeout(resizeVisible, 60);
+    }
+  }, true);
+
+  window.addEventListener('load', function () { resizeVisible(); });
+})();
+</script>

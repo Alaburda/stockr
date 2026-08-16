@@ -23,7 +23,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "app" / "streamlit"))
 
-from lib.config import DEFAULT_ETFS, DEFAULT_INDICES, DEFAULT_WATCHLIST  # noqa: E402
+from lib.config import (  # noqa: E402
+    DASHBOARD_GROUPS, DASHBOARD_NAMES, DASHBOARD_TICKERS,
+    DEFAULT_ETFS, DEFAULT_INDICES, DEFAULT_WATCHLIST,
+)
 from lib.fetch import fetch_bulk  # noqa: E402
 
 # How much history each ticker keeps. 5y so the weekly and monthly candle views
@@ -50,11 +53,17 @@ OUT_DIR = ROOT / "site" / "data"
 
 
 def universe() -> dict[str, list[str]]:
-    """Tickers to publish, grouped so the page can section them."""
+    """Tickers to publish, grouped so the page can section them.
+
+    Order matters: a ticker's `group` column is its FIRST match here, so SPY
+    stays an "etf" for the ETF table even though it's also a dashboard
+    benchmark. The RS boards select by explicit ticker list instead.
+    """
     return {
         "watchlist": DEFAULT_WATCHLIST,
         "etf": DEFAULT_ETFS,
         "index": DEFAULT_INDICES,
+        "dashboard": DASHBOARD_TICKERS,
     }
 
 
@@ -74,7 +83,10 @@ def main() -> int:
             .groupby("ticker", group_keys=False)
             .tail(LOOKBACK_DAYS))
 
-    group_of = {t: name for name, tickers in groups.items() for t in tickers}
+    group_of: dict[str, str] = {}
+    for name, tickers in groups.items():
+        for t in tickers:
+            group_of.setdefault(t, name)  # first match wins — see universe()
     df["group"] = df["ticker"].map(group_of)
     df = df[[c for c in KEEP if c in df.columns] + ["group"]]
 
@@ -91,6 +103,9 @@ def main() -> int:
         "ok": len(got),
         "missing": missing,
         "groups": groups,
+        # The RS boards render these sections by explicit ticker list.
+        "dashboard_groups": DASHBOARD_GROUPS,
+        "dashboard_names": DASHBOARD_NAMES,
     }
     (OUT_DIR / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
 

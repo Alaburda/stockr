@@ -28,9 +28,47 @@ python -m http.server 4321 --directory site/_site
 | File | Purpose |
 |---|---|
 | `_quarto.yml` | Site config — theme, navbar, output dir |
-| `index.qmd` | The Morning Board page (market strip, SPY chart, tables) |
+| `index.qmd` | The Morning Board page (market strip, SPY chart, tabs) |
+| `board.py` | Metrics — the app's SQL views ported to pandas |
 | `styles.scss` | Card + table styling on top of the `flatly` theme |
+| `resize-tabs.html` | Resizes Plotly charts when their tab becomes visible |
 | `data/` | Generated, gitignored — `prices.csv` + `meta.json` |
+
+## Page structure
+
+The market strip and the SPY chart stay pinned at the top; everything else is
+in tabs, so you don't scroll past sections you don't care about:
+
+| Tab | What it shows |
+|---|---|
+| **Watchlist** | Setup score, returns, RS vs SPY, RSI, ATR ext, % off 52w high |
+| **Benchmarks** | MA matrix (5/10/20/50/100/150/200) + percent-positive row, trailing returns |
+| **RS boards** | Index / Segment / EW Sector / SPDR Sector, percentile-ranked within each board |
+| **ETFs** | The ETF snapshot |
+| **Risk on/off** | TLT vs SPY, normalized |
+
+`board.py` ports `v_latest`, `v_perf`, `v_rs_spy` and `v_ma_matrix` from
+`db/views.sql` to pandas — same definitions, no database. It imports `HELP`
+from `app/streamlit/lib/glossary.py`, so every tooltip on the page is the same
+text the Streamlit app shows; there is no second copy to keep in sync.
+
+Hover tooltips are desktop-only (phones have no hover state), which is why the
+page also carries a full **Glossary** section at the bottom.
+
+### The setup score
+
+The `n/6` badge is the app's A-setup checklist: ATR ext < 4x, LoD dist < 0.6
+ATR, 200-MA rising, 10-MA rising, RS 1M > 0, rel vol >= 1. Hover it to see
+which checks passed. The watchlist sorts by this, then by RS — the morning
+question is "what is set up", not "what moved yesterday".
+
+### Charts in tabs
+
+A Plotly chart that renders inside a hidden tab measures itself at Plotly's
+default 700px and never learns its real width, so it stays clipped on a phone
+after you tap through. `resize-tabs.html` (wired in via `include-after-body`)
+resizes charts when their panel becomes visible. Any new tabbed chart is
+covered automatically.
 
 ## Data
 

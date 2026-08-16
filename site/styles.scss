@@ -97,6 +97,38 @@ table.board tbody tr:hover td { background: #f5f8fa; }
 
 .stamp { color: #7b8794; font-size: .82rem; }
 
+// Glossary-backed labels. Hover shows the explanation on desktop; phones have
+// no hover state, which is why the page also carries a full glossary section.
+abbr.gl {
+  text-decoration: underline dotted #b9c2cc;
+  text-underline-offset: 3px;
+  cursor: help;
+}
+
+.pill {
+  display: inline-block;
+  padding: .1rem .4rem;
+  border-radius: 4px;
+  font-size: .7rem;
+  font-weight: 600;
+  letter-spacing: .02em;
+}
+
+.pill.up   { background: rgba(24, 188, 156, .15); color: #10826f; }
+.pill.down { background: rgba(231, 76, 60, .15);  color: #c0392b; }
+
+table.board tr.summary td {
+  font-weight: 700;
+  border-top: 2px solid #2c3e50;
+  background: #f7f9fa;
+}
+
+dl.glossary {
+  margin: 0;
+  dt { font-weight: 700; color: #2c3e50; margin-top: .7rem; }
+  dd { margin: .15rem 0 0; color: #52606d; font-size: .9rem; }
+}
+
 // Timeframe switch (Daily / Weekly / Monthly) above a candle chart.
 .tf-switch {
   display: flex;
