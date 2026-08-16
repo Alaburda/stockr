@@ -57,6 +57,12 @@ jobs:
         continue-on-error: true
         run: python scripts/fetch_sp500.py
 
+      # Long-history macro correlation studies. Also additive — the Indicators
+      # page drops those two tabs' content rather than failing without it.
+      - name: Fetch macro correlation studies
+        continue-on-error: true
+        run: python scripts/fetch_macro.py
+
       - name: Render site
         run: quarto render site
 

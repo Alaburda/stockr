@@ -19,7 +19,26 @@ from charts import GREEN, INK, PURPLE, RED, WEEKEND_BREAK, html_table, plain, si
 
 px_all, meta, M = board.load()
 SP = board.load_sp500()
+MACRO = board.load_macro()
 NAMES = meta.get("dashboard_names", {})
+
+
+def verdict(study: dict, higher_is_claim: bool = True) -> str:
+    """One-line read on whether an event study supports its claim.
+
+    ratio_median > 1 means the conditional outcome runs bigger than baseline.
+    """
+    if not study or not study.get("n"):
+        return "<span class='stamp'>no events</span>"
+    r = study.get("ratio_median")
+    if r is None:
+        return "<span class='stamp'>n/a</span>"
+    supports = (r > 1.05) if higher_is_claim else (r < 0.95)
+    cls = "up" if supports else "down"
+    word = "supports" if supports else "does not support"
+    return (f"<span class='{cls}'><b>{word}</b></span> — {study['n']} events, "
+            f"median {study['median']} vs baseline {study['baseline_median']} "
+            f"(×{r}), {study['pct_above_baseline_median']}% above baseline")
 
 
 def series(ticker):
@@ -148,6 +167,191 @@ else:
 ::: {.stamp}
 Equal-weighted sector return minus SPY over the same window, in percentage
 points. Sectors at the top are where money is rotating in.
+:::
+
+## Housing corr
+
+```{python}
+if not MACRO or MACRO.get("corr") is None:
+    display(Markdown("Macro studies unavailable — `scripts/fetch_macro.py` runs best-effort."))
+else:
+    from plotly.subplots import make_subplots
+    c = MACRO["corr"]
+    h = MACRO["meta"]["hgx"]
+    view = c.tail(2600)  # ~10 years, enough to see the episodes
+
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.68, 0.32],
+                        vertical_spacing=0.04)
+    fig.add_trace(go.Scatter(x=view["date"], y=view["spx"], mode="lines", name="SPX",
+                             line=dict(color=INK, width=1.2)), row=1, col=1)
+    fig.add_trace(go.Scatter(x=view["date"], y=view["corr10_px"], mode="lines",
+                             name="corr10 (price)", line=dict(color=RED, width=1)),
+                  row=2, col=1)
+    fig.add_trace(go.Scatter(x=view["date"], y=view["corr10"], mode="lines",
+                             name="corr10 (returns)", line=dict(color="#3498db", width=1)),
+                  row=2, col=1)
+    fig.add_hline(y=0, line_dash="dot", line_color="#7b8794", row=2, col=1)
+    fig.update_yaxes(type="log", side="right", row=1, col=1)
+    fig.update_yaxes(side="right", range=[-1.05, 1.05], row=2, col=1)
+    fig.update_layout(height=470, margin=dict(l=8, r=8, t=30, b=26),
+                      template="plotly_white",
+                      legend=dict(orientation="h", y=1.0, yanchor="bottom", x=0),
+                      xaxis2=dict(rangebreaks=WEEKEND_BREAK))
+    fig.show(config={"responsive": True, "displayModeBar": False})
+
+    cur = h["current"]
+    cards = [
+        ("corr10 (returns)", f"{cur['corr10_returns']:+.2f}", cur["negative_returns"]),
+        ("corr10 (price)", f"{cur['corr10_price']:+.2f}", cur["negative_price"]),
+    ]
+    tiles = "".join(
+        f'<div class="stat"><div class="label">{lbl}</div>'
+        f'<div class="value {"down" if neg else "up"}">{val}</div>'
+        f'<div class="delta stamp">{"negative" if neg else "positive"}</div></div>'
+        for lbl, val, neg in cards)
+    tiles += (f'<div class="stat"><div class="label">Price corr 5d ago</div>'
+              f'<div class="value">{cur["corr10_price_5d_ago"]:+.2f}</div>'
+              f'<div class="delta stamp">now {cur["corr10_price"]:+.2f}</div></div>')
+    display(HTML(f'<div class="stat-strip">{tiles}</div>'))
+```
+
+::: {.stamp}
+10-day correlation of the S&P 500 to the PHLX Housing index (^HGX), from
+`{python} MACRO["meta"]["hgx"]["start"] if MACRO else "n/a"`. Two definitions
+are shown because they disagree: charting packages usually correlate **closing
+prices**, while correlating **returns** is the sounder read — over 10 bars a
+price correlation mostly measures shared trend.
+:::
+
+```{python}
+if MACRO and MACRO.get("corr") is not None:
+    h = MACRO["meta"]["hgx"]
+    rows = []
+    for key in ("returns", "price"):
+        s = h[key]["episode_starts"]
+        rows.append(
+            f"<tr><td>{key}</td><td>{h[key]['pct_days_negative']}%</td>"
+            f"<td>{h[key]['episodes']}</td>"
+            f"<td>{verdict(s, higher_is_claim=True)}</td></tr>")
+    display(HTML(
+        "<div class='table-wrap'><table class='board'><thead><tr>"
+        "<th>Definition</th><th>Days negative</th><th>Episodes</th>"
+        f"<th>Claim: negative corr → volatility within {h['forward_days']}d</th>"
+        f"</tr></thead><tbody>{''.join(rows)}</tbody></table></div>"))
+```
+
+::: {.callout-warning collapse="true" title="What the history actually says about this signal"}
+The claim attached to this indicator is that stretches of negative correlation
+tend to be followed by market volatility. Tested over the full ^HGX history,
+**it isn't supported** — on either definition, at 10/21/63-day horizons, and
+whether the outcome is realized volatility, forward drawdown, or absolute move.
+Forward volatility after a negative reading runs at or *below* baseline
+(roughly ×0.86–0.97), and forward drawdowns are shallower, not deeper.
+
+These are overlapping forward windows, so treat them as descriptive rather than
+significance-tested — but the effect doesn't merely fail to reach significance,
+it points the other way across every specification tried.
+
+The indicator is here because it's worth watching a housing/equity divergence
+on its own merits. It just shouldn't be read as a volatility warning.
+:::
+
+## Macro lockstep
+
+```{python}
+if not MACRO or MACRO.get("lockstep") is None:
+    display(Markdown("Macro studies unavailable — `scripts/fetch_macro.py` runs best-effort."))
+else:
+    from plotly.subplots import make_subplots
+    lk = MACRO["lockstep"]
+    L = MACRO["meta"]["lockstep"]
+    view = lk.tail(2600)
+
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.55, 0.45],
+                        vertical_spacing=0.05)
+    fig.add_trace(go.Scatter(x=view["date"], y=view["pc1_share"], mode="lines",
+                             name="Lockstep (PC1 share)", line=dict(color=PURPLE, width=1.4)),
+                  row=1, col=1)
+    fig.add_hline(y=L["decile_hi"], line_dash="dash", line_color="#e74c3c", row=1, col=1)
+    fig.add_hline(y=L["decile_lo"], line_dash="dot", line_color="#b9c2cc", row=1, col=1)
+    for col, name, color in (("c_spx_tyx", "SPX·30Y", "#3498db"),
+                             ("c_spx_dxy", "SPX·DXY", "#e67e22"),
+                             ("c_tyx_dxy", "30Y·DXY", "#18bc9c")):
+        fig.add_trace(go.Scatter(x=view["date"], y=view[col], mode="lines", name=name,
+                                 line=dict(color=color, width=1)), row=2, col=1)
+    fig.add_hline(y=0, line_dash="dot", line_color="#7b8794", row=2, col=1)
+    fig.update_yaxes(side="right", row=1, col=1)
+    fig.update_yaxes(side="right", range=[-1.05, 1.05], row=2, col=1)
+    fig.update_layout(height=470, margin=dict(l=8, r=8, t=30, b=26),
+                      template="plotly_white",
+                      legend=dict(orientation="h", y=1.0, yanchor="bottom", x=0))
+    fig.show(config={"responsive": True, "displayModeBar": False})
+
+    t = MACRO["meta"].get("tyx", {})
+    tiles = [
+        ("Lockstep now", f"{L['current_pc1']:.2f}",
+         f"{L['current_pct_rank']:.0f}th pct", L["current_pc1"] >= L["decile_hi"]),
+        ("Aligned above", f"{L['decile_hi']:.2f}", "top decile", False),
+        ("30Y yield", f"{t.get('current', float('nan')):.2f}%",
+         f"{t.get('pct_off_5y_high', 0):+.2f}% vs 5y high", False),
+        ("30Y vs all-time", f"{t.get('pct_of_all_time_high', 0):.0f}%",
+         f"ATH {t.get('all_time_high', 0):.2f}% in {str(t.get('all_time_high_date',''))[:4]}", False),
+    ]
+    display(HTML('<div class="stat-strip">' + "".join(
+        f'<div class="stat"><div class="label">{lbl}</div>'
+        f'<div class="value {"up" if hot else ""}">{val}</div>'
+        f'<div class="delta stamp">{sub}</div></div>'
+        for lbl, val, sub, hot in tiles) + "</div>"))
+```
+
+```{python}
+if MACRO and MACRO.get("lockstep") is not None:
+    L = MACRO["meta"]["lockstep"]
+    pw = L["pairwise_now"]
+    ld = L["loadings"]
+    body = "".join(
+        f"<tr><td>{k}</td><td>{v:+.2f}</td></tr>"
+        for k, v in [("SPX · 30Y", pw["spx_tyx"]), ("SPX · Dollar", pw["spx_dxy"]),
+                     ("30Y · Dollar", pw["tyx_dxy"])])
+    display(HTML(
+        "<div class='table-wrap'><table class='board'><thead><tr><th>Pair</th>"
+        f"<th>{L['window']}d correlation</th></tr></thead><tbody>{body}</tbody>"
+        "</table></div>"))
+
+    rows = "".join(
+        f"<tr><td>{lbl}</td><td>{verdict(L[key], higher_is_claim=claim)}</td></tr>"
+        for lbl, key, claim in [
+            (f"Aligned → bigger {L['forward_days']}d move (either direction)",
+             "abs_move_when_aligned", True),
+            (f"Aligned → higher {L['forward_days']}d realized vol",
+             "vol_when_aligned", True),
+            (f"Dispersed → smaller {L['forward_days']}d move",
+             "abs_move_when_dispersed", False)])
+    display(HTML(
+        "<div class='table-wrap'><table class='board'><thead><tr><th>Claim</th>"
+        f"<th>Since {L['start']}</th></tr></thead><tbody>{rows}</tbody></table></div>"))
+```
+
+::: {.callout-note collapse="true" title="How the lockstep score works, and what the history says"}
+"All three moving in lockstep" is a statement about a single common factor
+driving the S&P 500, the 30-year yield, and the dollar. That is what the first
+principal component's share of variance measures: **0.33** means the three are
+independent, **1.00** means they're one thing wearing three hats. It's computed
+on a `{python} MACRO["meta"]["lockstep"]["window"] if MACRO else 60`-day
+rolling correlation matrix of daily innovations — log returns for the S&P and
+the dollar, and a **first difference** for the 30-year, because a percentage
+"return" on a yield level would make the correlation depend on the level rather
+than the move.
+
+Tested back to 1977, the framework holds up: when alignment sits in its top
+decile, the next month's absolute S&P move runs about ×1.14 baseline and
+realized volatility ×1.20 — and the converse also holds, with dispersed periods
+running ×0.79. Measuring *absolute* move is the right test for a claim about
+"melt ups and meltdowns alike".
+
+On the 30-year "pushing back toward all time highs": it is at its **10-year**
+high, which is the useful sense of the claim. It is not near its all-time high —
+that was 15.21% in October 1981, and today's level is about a third of it.
 :::
 
 ## RS boards

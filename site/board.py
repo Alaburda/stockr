@@ -217,6 +217,19 @@ def load_sp500(data_dir: str | Path = "data"):
     return out
 
 
+def load_macro(data_dir: str | Path = "data"):
+    """Macro correlation studies, or None if that best-effort job didn't run."""
+    d = Path(data_dir)
+    p = d / "macro_meta.json"
+    if not p.exists():
+        return None
+    out = {"meta": json.loads(p.read_text(encoding="utf-8"))}
+    for name in ("corr", "lockstep"):
+        f = d / f"macro_{name}.csv"
+        out[name] = pd.read_csv(f, parse_dates=["date"]) if f.exists() else None
+    return out
+
+
 def rs_rank(df: pd.DataFrame, tickers: list[str], col: str = "ret_1m") -> pd.DataFrame:
     """Members of one RS board, percentile-ranked within the board (lib/rs.py).
 
