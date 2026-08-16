@@ -147,9 +147,17 @@ def main() -> int:
 
     got = sorted(df["ticker"].unique())
     missing = [t for t in symbols if t not in set(got)]
+    # "Last bar" means the benchmark's last session, not the max across the
+    # universe: DX-Y.NYB carries a Sunday bar (ICE quotes the dollar index on
+    # Sunday evening), so the max would advertise the board as a day or two
+    # fresher than every equity number on it actually is.
+    spy_dates = df.loc[df["ticker"] == "SPY", "date"]
+    last_bar = str(spy_dates.max() if not spy_dates.empty else df["date"].max())[:10]
+
     meta = {
         "fetched_at_utc": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
-        "last_bar": str(df["date"].max())[:10],
+        "last_bar": last_bar,
+        "last_bar_any_ticker": str(df["date"].max())[:10],
         "requested": len(symbols),
         "ok": len(got),
         "missing": missing,
