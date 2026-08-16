@@ -59,6 +59,18 @@ KEEP = [
 OUT_DIR = ROOT / "site" / "data"
 
 
+def fail(msg: str) -> int:
+    """Report a build-stopping problem, and say why where it can be read.
+
+    `::error::` becomes a GitHub Actions annotation, which is readable from the
+    API without pulling the job log. A nightly build that dies at 02:00 should
+    be able to tell you what went wrong without opening the web UI.
+    """
+    print(f"::error::{msg}", flush=True)
+    print(f"ERROR: {msg}", file=sys.stderr)
+    return 1
+
+
 def universe() -> dict[str, list[str]]:
     """Tickers to publish, grouped so the page can section them.
 
@@ -117,8 +129,7 @@ def main() -> int:
     df = fetch_bulk(symbols, period=FETCH_PERIOD,
                     progress=lambda frac, label: print(f"  {frac:5.0%} {label}", flush=True))
     if df.empty:
-        print("ERROR: Yahoo returned nothing for the whole universe.", file=sys.stderr)
-        return 1
+        return fail("Yahoo returned nothing for the whole universe.")
 
     df = backfill(df, symbols)
 
@@ -180,21 +191,28 @@ def main() -> int:
     if missing:
         print(f"Missing: {', '.join(missing)}")
 
+    coverage = len(got) / len(symbols)
     absent = [t for t in REQUIRED if t not in set(got)]
     if absent:
-        print(f"ERROR: required ticker(s) missing: {', '.join(absent)}. These build "
-              f"the market strip; publishing without them would quietly drop tiles.",
-              file=sys.stderr)
-        return 1
+        return fail(f"Required ticker(s) missing after backfill: {', '.join(absent)}. "
+                    f"Coverage was {len(got)}/{len(symbols)}. These build the market "
+                    f"strip; publishing without them would quietly drop tiles. "
+                    f"This is usually Yahoo throttling CI — re-run the workflow.")
 
-    coverage = len(got) / len(symbols)
     if coverage < MIN_COVERAGE:
-        print(f"ERROR: only {coverage:.0%} of tickers returned data "
-              f"(need {MIN_COVERAGE:.0%}). Refusing to publish a partial board.",
-              file=sys.stderr)
-        return 1
+        return fail(f"Only {coverage:.0%} of tickers returned data "
+                    f"(need {MIN_COVERAGE:.0%}); missing: {', '.join(missing[:15])}. "
+                    f"Refusing to publish a partial board.")
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    # An unhandled crash exits 1 with nothing in the annotations, which reads
+    # identically to a guard firing on purpose. Surface the difference.
+    try:
+        raise SystemExit(main())
+    except SystemExit:
+        raise
+    except Exception as exc:  # noqa: BLE001 — re-raised after reporting
+        print(f"::error::fetch_prices crashed: {type(exc).__name__}: {exc}", flush=True)
+        raise

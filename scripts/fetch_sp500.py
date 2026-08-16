@@ -179,4 +179,17 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    # This step is continue-on-error, so a warning (not an error) annotation:
+    # it explains why the breadth panels are absent without implying the build
+    # broke.
+    try:
+        code = main()
+        if code:
+            print("::warning::S&P 500 aggregates unavailable this run; "
+                  "Indicators will render without the breadth panels.", flush=True)
+        raise SystemExit(code)
+    except SystemExit:
+        raise
+    except Exception as exc:  # noqa: BLE001 — re-raised after reporting
+        print(f"::warning::fetch_sp500 crashed: {type(exc).__name__}: {exc}", flush=True)
+        raise
