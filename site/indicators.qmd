@@ -1,0 +1,263 @@
+---
+title: "Indicators"
+---
+
+```{python}
+# | tags: [setup]
+import sys
+from pathlib import Path
+
+import pandas as pd
+import plotly.graph_objects as go
+from IPython.display import HTML, Markdown, display
+
+sys.path.insert(0, str(Path.cwd()))
+import board
+import charts
+from board import HELP, MA_WINDOWS, tip
+from charts import GREEN, INK, PURPLE, RED, WEEKEND_BREAK, html_table, plain, signed
+
+px_all, meta, M = board.load()
+SP = board.load_sp500()
+NAMES = meta.get("dashboard_names", {})
+
+
+def series(ticker):
+    return px_all[px_all["ticker"] == ticker]
+
+
+def note(text):
+    return Markdown(f"::: {{.stamp}}\n{text}\n:::")
+```
+
+```{python}
+stamp = (f"Last bar **{meta['last_bar']}** · {meta['ok']}/{meta['requested']} tickers")
+if SP:
+    m = SP["meta"]
+    stamp += f" · S&P 500 {m['ok']}/{m['constituents']} ({m['coverage']:.0%})"
+else:
+    stamp += " · S&P 500 aggregates unavailable"
+Markdown(f"<p class='stamp'>{stamp}</p>")
+```
+
+::: {.panel-tabset}
+
+## Breadth
+
+```{python}
+if not SP or SP.get("breadth") is None:
+    display(Markdown(
+        "S&P 500 breadth is missing. `scripts/fetch_sp500.py` runs best-effort — "
+        "it pulls ~500 tickers and is allowed to fail without taking the board "
+        "down. Re-run the workflow to try again."))
+else:
+    b = SP["breadth"]
+    fig = go.Figure()
+    for col, label, color in [("pct_above_20", "% > 20d", "#3498db"),
+                              ("pct_above_50", "% > 50d", "#e67e22"),
+                              ("pct_above_200", "% > 200d", PURPLE)]:
+        fig.add_trace(go.Scatter(x=b["date"], y=b[col], mode="lines", name=label,
+                                 line=dict(color=color, width=1.6)))
+    # 50% is the line between "most stocks participating" and "most not".
+    fig.add_hline(y=50, line_dash="dot", line_color="#b9c2cc")
+    fig.update_layout(height=380, margin=dict(l=8, r=8, t=30, b=26),
+                      template="plotly_white", yaxis=dict(side="right", range=[0, 100]),
+                      legend=dict(orientation="h", y=1.0, yanchor="bottom", x=0),
+                      xaxis=dict(rangebreaks=WEEKEND_BREAK))
+    fig.show(config={"responsive": True, "displayModeBar": False})
+```
+
+```{python}
+if SP and SP.get("breadth") is not None:
+    last = SP["breadth"].iloc[-1]
+    cards = []
+    for col, label, key in [("pct_above_20", "% > 20d SMA", "breadth_20"),
+                            ("pct_above_50", "% > 50d SMA", "breadth_50"),
+                            ("pct_above_200", "% > 200d SMA", "breadth_200"),
+                            ("pct_up", "% up on day", None)]:
+        v = last[col]
+        cls = "up" if v >= 50 else "down"
+        lbl = tip(label, key) if key else label
+        cards.append(f'<div class="stat"><div class="label">{lbl}</div>'
+                     f'<div class="value {cls}">{v:.0f}%</div>'
+                     f'<div class="delta stamp">of {int(last["n"])}</div></div>')
+    display(HTML(f'<div class="stat-strip">{"".join(cards)}</div>'))
+```
+
+::: {.stamp}
+Share of S&P 500 members above their own moving average. Above ~60% supports an
+uptrend; below ~40% says the rally is narrowing to fewer stocks even when the
+index looks fine.
+:::
+
+## New highs / lows
+
+```{python}
+if not SP or SP.get("highlow") is None:
+    display(Markdown("52-week high/low counts unavailable — see the Breadth tab."))
+else:
+    hl = SP["highlow"]
+    fig = go.Figure()
+    fig.add_trace(go.Bar(x=hl["date"], y=hl["new_highs"], name="New highs",
+                         marker_color=GREEN))
+    fig.add_trace(go.Bar(x=hl["date"], y=-hl["new_lows"], name="New lows",
+                         marker_color=RED))
+    fig.add_trace(go.Scatter(x=hl["date"], y=hl["net"], mode="lines", name="Net",
+                             line=dict(color=INK, width=1.4)))
+    fig.update_layout(height=380, margin=dict(l=8, r=8, t=30, b=26),
+                      template="plotly_white", barmode="relative",
+                      yaxis=dict(side="right"),
+                      legend=dict(orientation="h", y=1.0, yanchor="bottom", x=0),
+                      xaxis=dict(rangebreaks=WEEKEND_BREAK))
+    fig.show(config={"responsive": True, "displayModeBar": False})
+
+    latest = hl.iloc[-1]
+    display(HTML(
+        f'<div class="stat-strip">'
+        f'<div class="stat"><div class="label">New 52w highs</div>'
+        f'<div class="value up">{int(latest["new_highs"])}</div></div>'
+        f'<div class="stat"><div class="label">New 52w lows</div>'
+        f'<div class="value down">{int(latest["new_lows"])}</div></div>'
+        f'<div class="stat"><div class="label">{tip("Net", "nh_nl")}</div>'
+        f'<div class="value {"up" if latest["net"] >= 0 else "down"}">'
+        f'{int(latest["net"]):+d}</div></div></div>'))
+```
+
+::: {.stamp}
+Net highs minus lows. Negative while the index makes new highs is the classic
+divergence warning — the rally thinning out underneath.
+:::
+
+## Sector RS
+
+```{python}
+if not SP or SP.get("sector_rs") is None:
+    display(Markdown("Sector RS unavailable — see the Breadth tab."))
+else:
+    s = SP["sector_rs"].set_index("sector")
+    SEC_SPEC = [
+        ("n",      "Members",                        lambda v: plain(v, 0)),
+        ("ret_21", tip("1M", "ret_1m"),              lambda v: signed(v * 100, 1)),
+        ("ret_63", tip("3M", "ret_3m"),              lambda v: signed(v * 100, 1)),
+        ("rs_21",  tip("RS 1M", "sector_rs_1m"),     lambda v: signed(v, 1)),
+        ("rs_63",  tip("RS 3M", "sector_rs_3m"),     lambda v: signed(v, 1)),
+    ]
+    display(HTML(html_table(s, SEC_SPEC, first_header="Sector")))
+```
+
+::: {.stamp}
+Equal-weighted sector return minus SPY over the same window, in percentage
+points. Sectors at the top are where money is rotating in.
+:::
+
+## RS boards
+
+```{python}
+RS_SPEC = [
+    ("rs_pct",      tip("RS rank", "rs_1m"),               lambda v: plain(v, 0)),
+    ("ret_1d",      "1D",                                  lambda v: signed(v * 100, 1)),
+    ("ret_1m",      tip("1M", "ret_1m"),                   lambda v: signed(v * 100, 1)),
+    ("rs_1m",       tip("RS 1M", "rs_1m"),                 lambda v: signed(v, 1)),
+    ("rs_3m",       tip("RS 3M", "rs_3m"),                 lambda v: signed(v, 1)),
+    ("pct_off_52w", tip("Off 52w hi", "pct_off_52w_high"), lambda v: signed(v, 1)),
+]
+
+out = []
+for group_name, tickers in meta.get("dashboard_groups", {}).items():
+    sub = board.rs_rank(M, tickers)
+    if sub.empty:
+        continue
+    out.append(f"<h4>{group_name}</h4>")
+    out.append(html_table(
+        sub, RS_SPEC,
+        first_cell=lambda tk, r: f"{tk} <span class='stamp'>{NAMES.get(tk, '')}</span>"))
+HTML("".join(out))
+```
+
+## Benchmarks
+
+```{python}
+MATRIX_TICKERS = ["SPY", "QQQ", "DIA", "IWM", "RSP", "IJH", "IJR"]
+mm = M[M.index.isin(MATRIX_TICKERS)].reindex([t for t in MATRIX_TICKERS if t in M.index])
+
+
+def ma_cell(v):
+    if v is None or (isinstance(v, float) and pd.isna(v)):
+        return "—"
+    return ('<span class="pill up">above</span>' if v
+            else '<span class="pill down">below</span>')
+
+
+MM_SPEC = ([(f"above_{w}", str(w), ma_cell) for w in MA_WINDOWS] +
+           [("ret_ytd", tip("YTD", "ret_ytd"), lambda v: signed(v * 100, 1)),
+            ("pct_off_52w", tip("Off 52w hi", "pct_off_52w_high"), lambda v: signed(v, 1))])
+
+table = html_table(mm, MM_SPEC, first_header=tip("MA matrix", "ma_matrix"))
+
+# "Percent positive" — breadth across the benchmark list itself.
+pos = []
+for w in MA_WINDOWS:
+    vals = [v for v in mm[f"above_{w}"] if v is not None]
+    pos.append(f"<td>{(100 * sum(vals) / len(vals)):.0f}%</td>" if vals else "<td>—</td>")
+table = table.replace("</tbody>",
+                      f"<tr class='summary'><td>Percent positive</td>{''.join(pos)}"
+                      f"<td></td><td></td></tr></tbody>")
+display(HTML(table))
+
+PERF_SPEC = [
+    ("ret_1w",  tip("1W", "ret_1w"),   lambda v: signed(v * 100, 1)),
+    ("ret_1m",  tip("1M", "ret_1m"),   lambda v: signed(v * 100, 1)),
+    ("ret_3m",  tip("3M", "ret_3m"),   lambda v: signed(v * 100, 1)),
+    ("ret_6m",  tip("6M", "ret_6m"),   lambda v: signed(v * 100, 1)),
+    ("ret_ytd", tip("YTD", "ret_ytd"), lambda v: signed(v * 100, 1)),
+    ("rsi",     tip("RSI", "rsi"),     lambda v: plain(v, 0)),
+]
+display(Markdown("**Trailing returns**"))
+HTML(html_table(M[M.index.isin(MATRIX_TICKERS)].sort_values("ret_1m", ascending=False),
+                PERF_SPEC))
+```
+
+## Risk on/off
+
+```{python}
+# TLT vs SPY, both normalized to 100 at the start of the window. Rising = bonds
+# outperforming (risk-off); falling = equities leading (risk-on).
+win = 126
+tlt, spy = series("TLT").tail(win), series("SPY").tail(win)
+fig = go.Figure()
+if not tlt.empty and not spy.empty:
+    j = (tlt[["date", "close"]].rename(columns={"close": "tlt"})
+         .merge(spy[["date", "close"]].rename(columns={"close": "spy"}), on="date"))
+    ratio = j["tlt"] / j["spy"]
+    fig.add_trace(go.Scatter(x=j["date"], y=ratio / ratio.iloc[0] * 100, mode="lines",
+                             name="TLT / SPY", line=dict(color=PURPLE, width=2)))
+    fig.add_hline(y=100, line_dash="dot", line_color="#b9c2cc")
+fig.update_layout(height=320, margin=dict(l=8, r=8, t=30, b=26), template="plotly_white",
+                  yaxis=dict(side="right"), showlegend=False,
+                  xaxis=dict(rangebreaks=WEEKEND_BREAK))
+fig.show(config={"responsive": True, "displayModeBar": False})
+```
+
+::: {.stamp}
+TLT (20+ year Treasuries) relative to SPY, normalized to 100 six months ago.
+Rising = bonds outperforming stocks (risk-off). Read the slope, not the level.
+:::
+
+:::
+
+::: {.callout-note collapse="true" title="Glossary"}
+
+```{python}
+KEYS = ["breadth_20", "breadth_50", "breadth_200", "nh_nl", "sector_rs_1m",
+        "sector_rs_3m", "ma_matrix", "rs_1m", "rs_3m", "tlt_spy_ratio",
+        "pct_off_52w_high"]
+LABELS = {"breadth_20": "Breadth 20d", "breadth_50": "Breadth 50d",
+          "breadth_200": "Breadth 200d", "nh_nl": "Net new highs/lows",
+          "sector_rs_1m": "Sector RS 1M", "sector_rs_3m": "Sector RS 3M",
+          "ma_matrix": "MA matrix", "rs_1m": "RS 1M", "rs_3m": "RS 3M",
+          "tlt_spy_ratio": "TLT vs SPY", "pct_off_52w_high": "Off 52-week high"}
+items = "".join(f"<dt>{LABELS[k]}</dt><dd>{HELP[k]}</dd>" for k in KEYS if k in HELP)
+HTML(f"<dl class='glossary'>{items}</dl>")
+```
+
+:::

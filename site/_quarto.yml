@@ -10,6 +10,10 @@ website:
     left:
       - href: index.qmd
         text: Morning Board
+      - href: indicators.qmd
+        text: Indicators
+      - href: stock.qmd
+        text: Single Stock View
 
 format:
   html:

@@ -4,58 +4,29 @@ title: "Morning Board"
 
 ```{python}
 # | tags: [setup]
-import json
 import sys
 from pathlib import Path
 
 import pandas as pd
-import plotly.graph_objects as go
 from IPython.display import HTML, Markdown, display
 
 sys.path.insert(0, str(Path.cwd()))
 import board
-from board import HELP, SETUP_CHECKS, MA_WINDOWS, tip
+import charts
+from board import HELP, SETUP_CHECKS, tip
+from charts import html_table, plain, signed
 
-DATA = Path("data")
-px_all = pd.read_csv(DATA / "prices.csv", parse_dates=["date"]).sort_values(["ticker", "date"])
-meta = json.loads((DATA / "meta.json").read_text(encoding="utf-8"))
-
-M = board.latest_metrics(px_all)
-NAMES = meta.get("dashboard_names", {})
+px_all, meta, M = board.load()
 
 
-def series(ticker: str) -> pd.DataFrame:
+def series(ticker):
     return px_all[px_all["ticker"] == ticker]
-
-
-def signed(x, dp=2, suffix="%"):
-    if pd.isna(x):
-        return '<span class="stamp">—</span>'
-    return f'<span class="{"up" if x >= 0 else "down"}">{x:+.{dp}f}{suffix}</span>'
-
-
-def plain(x, dp=2, suffix=""):
-    return "—" if pd.isna(x) else f"{x:,.{dp}f}{suffix}"
-
-
-# Column spec: (key, header label, formatter). Headers carry glossary tooltips.
-def html_table(df, spec, first_header="Ticker", first_cell=lambda tk, r: tk):
-    head = "".join(f"<th>{lbl}</th>" for _, lbl, _ in spec)
-    body = []
-    for tk, r in df.iterrows():
-        cells = "".join(f"<td>{fmt(r.get(key))}</td>" for key, _, fmt in spec)
-        body.append(f"<tr><td>{first_cell(tk, r)}</td>{cells}</tr>")
-    return (f"<div class='table-wrap'><table class='board'><thead><tr>"
-            f"<th>{first_header}</th>{head}</tr></thead>"
-            f"<tbody>{''.join(body)}</tbody></table></div>")
 ```
 
 ```{python}
 Markdown(f"<p class='stamp'>Last bar **{meta['last_bar']}** · fetched {meta['fetched_at_utc']} · "
          f"{meta['ok']}/{meta['requested']} tickers</p>")
 ```
-
-## Market
 
 ```{python}
 STRIP = [("SPY", "S&P 500", None), ("QQQ", "Nasdaq 100", None), ("^VIX", "VIX", None),
@@ -75,10 +46,10 @@ for sym, label, key in STRIP:
 # Volatility stress: VIX3M/VIX below 1 = front-month fear exceeds longer-dated.
 if {"^VIX", "^VIX3M"} <= set(M.index):
     ratio = M.loc["^VIX3M", "close"] / M.loc["^VIX", "close"]
-    cls = "down" if ratio < 1 else "up"
     cards.append(f'<div class="stat"><div class="label">{tip("VIX3M / VIX", "vix_ratio")}</div>'
                  f'<div class="value">{ratio:.2f}</div>'
-                 f'<div class="delta {cls}">{"stressed" if ratio < 1 else "calm"}</div></div>')
+                 f'<div class="delta {"down" if ratio < 1 else "up"}">'
+                 f'{"stressed" if ratio < 1 else "calm"}</div></div>')
 
 # Equal-weight vs cap-weight: is the average stock leading the mega-caps?
 if {"RSP", "SPY"} <= set(M.index):
@@ -92,110 +63,8 @@ HTML(f'<div class="stat-strip">{"".join(cards)}</div>')
 ```
 
 ```{python}
-# Daily / Weekly / Monthly candles. The site is static, so all three timeframes
-# are computed here and shipped in the figure; the buttons swap which set is
-# visible. No server involved, and it works offline.
-TIMEFRAMES = [("Daily", None, 130), ("Weekly", "W-FRI", 104), ("Monthly", "ME", 60)]
-MA_SPEC = [("sma10", "#3498db", 1.0), ("sma20", "#e67e22", 1.0), ("sma50", "#9b59b6", 1.4)]
-WEEKEND_BREAK = [dict(bounds=["sat", "mon"])]
-
-
-def timeframe_frame(df: pd.DataFrame, rule: str | None, bars: int) -> pd.DataFrame:
-    """OHLC at the requested timeframe, with MAs recomputed on that timeframe.
-
-    A 10-period MA means 10 *weeks* on the weekly chart — resampling the daily
-    MA instead would just be a sampled daily line wearing a weekly label.
-    """
-    if rule is None:
-        out = df.copy()  # daily: MAs already computed by lib.fetch
-    else:
-        out = (df.set_index("date")
-                 .resample(rule)
-                 .agg({"open": "first", "high": "max", "low": "min",
-                       "close": "last", "volume": "sum"})
-                 .dropna(subset=["close"])
-                 .reset_index())
-        for col, _, _ in MA_SPEC:
-            out[col] = out["close"].rolling(int(col.removeprefix("sma"))).mean()
-    return out.tail(bars)
-
-
-def candle_figure(df: pd.DataFrame, name: str, height: int = 400) -> go.Figure:
-    frames = [(label, timeframe_frame(df, rule, bars)) for label, rule, bars in TIMEFRAMES]
-
-    fig = go.Figure()
-    for i, (_, f) in enumerate(frames):
-        vis = i == 0
-        fig.add_trace(go.Candlestick(
-            x=f["date"], open=f["open"], high=f["high"], low=f["low"], close=f["close"],
-            increasing_line_color="#18bc9c", decreasing_line_color="#e74c3c",
-            name=name, visible=vis, showlegend=False))
-        for col, color, width in MA_SPEC:
-            fig.add_trace(go.Scatter(
-                x=f["date"], y=f[col], mode="lines", name=col.upper(),
-                line=dict(color=color, width=width), visible=vis))
-
-    fig.update_layout(
-        height=height, margin=dict(l=8, r=8, t=34, b=26), template="plotly_white",
-        xaxis_rangeslider_visible=False, xaxis=dict(rangebreaks=WEEKEND_BREAK),
-        yaxis=dict(side="right", tickformat=",.0f"),
-        legend=dict(orientation="h", y=1.0, yanchor="bottom", x=0, xanchor="left",
-                    font=dict(size=11)))
-    return fig
-
-
-def timeframe_switch(host_id: str) -> str:
-    """Button group + the script that swaps timeframes on the adjacent chart.
-
-    Plotly's own `updatemenus` buttons are locked to ~33px tall regardless of
-    font or padding, which is under the touch-target guideline, and they eat
-    chart height by living inside the plot. Real buttons cost ~15 lines of JS
-    and behave properly on a phone.
-    """
-    per_tf = 1 + len(MA_SPEC)
-    n = len(TIMEFRAMES) * per_tf
-    states = []
-    for i, _ in enumerate(TIMEFRAMES):
-        visible = [False] * n
-        for j in range(per_tf):
-            visible[i * per_tf + j] = True
-        # Weekend gaps only exist on the daily axis; keeping the rangebreak on a
-        # weekly/monthly chart would blank out most of the candles.
-        states.append({"visible": visible,
-                       "rangebreaks": WEEKEND_BREAK if i == 0 else []})
-
-    btns = "".join(
-        f'<button type="button" data-tf="{i}"'
-        f'{" class=\"active\"" if i == 0 else ""}>{label}</button>'
-        for i, (label, _, _) in enumerate(TIMEFRAMES))
-
-    return f"""
-<div class="tf-switch" id="{host_id}" role="group" aria-label="Candle timeframe">{btns}</div>
-<script>
-(function () {{
-  var STATES = {json.dumps(states)};
-  var host = document.getElementById({host_id!r});
-  function attach() {{
-    // The chart Quarto renders immediately after this button group.
-    var gd = host.parentElement.querySelector('.plotly-graph-div');
-    if (!gd || typeof Plotly === 'undefined') return setTimeout(attach, 60);
-    host.addEventListener('click', function (ev) {{
-      var b = ev.target.closest('button[data-tf]');
-      if (!b) return;
-      var s = STATES[+b.dataset.tf];
-      Plotly.update(gd, {{visible: s.visible}}, {{'xaxis.rangebreaks': s.rangebreaks}});
-      host.querySelectorAll('button').forEach(function (x) {{ x.classList.remove('active'); }});
-      b.classList.add('active');
-    }});
-  }}
-  attach();
-}})();
-</script>
-"""
-
-
-display(HTML(timeframe_switch("tf-spy")))
-candle_figure(series("SPY"), "SPY").show(
+display(HTML(charts.timeframe_switch("tf-spy")))
+charts.candle_figure(series("SPY"), "SPY").show(
     config={"responsive": True, "displayModeBar": False})
 ```
 
@@ -204,107 +73,36 @@ candle_figure(series("SPY"), "SPY").show(
 ## Watchlist
 
 ```{python}
-def setup_cell(tk, r):
+def setup_cell(r):
     """n/6 with the individual checks in the tooltip."""
-    results = r["setup_results"]
     detail = " · ".join(
         f"{'PASS' if ok else ('n/a' if ok is None else 'fail')} {label}"
-        for (label, _), ok in zip(SETUP_CHECKS, results))
+        for (label, _), ok in zip(SETUP_CHECKS, r["setup_results"]))
     n = r["setup_n"]
     cls = "up" if n >= 5 else ("down" if n <= 2 else "")
     return f'<abbr class="gl {cls}" title="{detail}">{n}/6</abbr>'
 
 
 WL_SPEC = [
-    ("close",       "Close",                              lambda v: plain(v, 2)),
-    ("ret_1d",      tip("1D", "ret_1w"),                  lambda v: signed(v * 100)),
-    ("ret_1w",      tip("1W", "ret_1w"),                  lambda v: signed(v * 100)),
-    ("ret_1m",      tip("1M", "ret_1m"),                  lambda v: signed(v * 100)),
-    ("rs_1m",       tip("RS 1M", "rs_1m"),                lambda v: signed(v, 1)),
-    ("rs_3m",       tip("RS 3M", "rs_3m"),                lambda v: signed(v, 1)),
-    ("rsi",         tip("RSI", "rsi"),                    lambda v: plain(v, 0)),
-    ("atr_ext",     tip("ATR ext", "sma50_atr_ext"),      lambda v: plain(v, 1)),
-    ("pct_off_52w", tip("Off 52w hi", "pct_off_52w_high"), lambda v: signed(v, 1)),
-    ("adr",         tip("ADR", "adr"),                    lambda v: plain(v * 100 if pd.notna(v) else v, 1, "%")),
-    ("rel_vol",     tip("Rel vol", "rel_vol"),            lambda v: plain(v, 2)),
-]
-
-# Sorted by the setup score, then relative strength: the morning question is
-# "which of these is set up right now", not "which moved yesterday".
-wl = (M[M["group"] == "watchlist"]
-      .sort_values(["setup_n", "rs_1m"], ascending=[False, False]))
-
-HTML(html_table(wl, WL_SPEC, first_header=tip("Setup", "setup_checklist"),
-                first_cell=lambda tk, r: f"{tk} {setup_cell(tk, r)}"))
-```
-
-## Benchmarks
-
-```{python}
-MATRIX_TICKERS = ["SPY", "QQQ", "DIA", "IWM", "RSP", "IJH", "IJR"]
-mm = M[M.index.isin(MATRIX_TICKERS)].reindex([t for t in MATRIX_TICKERS if t in M.index])
-
-
-def ma_cell(v):
-    if v is None or (isinstance(v, float) and pd.isna(v)):
-        return "—"
-    return ('<span class="pill up">above</span>' if v
-            else '<span class="pill down">below</span>')
-
-
-MM_SPEC = ([(f"above_{w}", str(w), ma_cell) for w in MA_WINDOWS] +
-           [("ret_ytd", tip("YTD", "ret_ytd"), lambda v: signed(v * 100, 1)),
-            ("pct_off_52w", tip("Off 52w hi", "pct_off_52w_high"), lambda v: signed(v, 1))])
-
-table = html_table(mm, MM_SPEC, first_header=tip("MA matrix", "ma_matrix"))
-
-# "Percent positive" — breadth across the benchmark list itself.
-pos = []
-for w in MA_WINDOWS:
-    vals = [v for v in mm[f"above_{w}"] if v is not None]
-    pos.append(f"<td>{(100 * sum(vals) / len(vals)):.0f}%</td>" if vals else "<td>—</td>")
-table = table.replace("</tbody>",
-                      f"<tr class='summary'><td>Percent positive</td>{''.join(pos)}"
-                      f"<td></td><td></td></tr></tbody>")
-HTML(table)
-```
-
-```{python}
-PERF_SPEC = [
-    ("ret_1w",  tip("1W", "ret_1w"),   lambda v: signed(v * 100, 1)),
-    ("ret_1m",  tip("1M", "ret_1m"),   lambda v: signed(v * 100, 1)),
-    ("ret_3m",  tip("3M", "ret_3m"),   lambda v: signed(v * 100, 1)),
-    ("ret_6m",  tip("6M", "ret_6m"),   lambda v: signed(v * 100, 1)),
-    ("ret_ytd", tip("YTD", "ret_ytd"), lambda v: signed(v * 100, 1)),
-    ("rsi",     tip("RSI", "rsi"),     lambda v: plain(v, 0)),
-]
-perf = M[M.index.isin(MATRIX_TICKERS)].sort_values("ret_1m", ascending=False)
-display(Markdown("**Trailing returns**"))
-HTML(html_table(perf, PERF_SPEC))
-```
-
-## RS boards
-
-```{python}
-RS_SPEC = [
-    ("rs_pct",      tip("RS rank", "rs_1m"),               lambda v: plain(v, 0)),
-    ("ret_1d",      "1D",                                  lambda v: signed(v * 100, 1)),
-    ("ret_1m",      tip("1M", "ret_1m"),                   lambda v: signed(v * 100, 1)),
+    ("close",       "Close",                               lambda v: plain(v, 2)),
+    ("ret_1d",      "1D",                                  lambda v: signed(v * 100)),
+    ("ret_1w",      tip("1W", "ret_1w"),                   lambda v: signed(v * 100)),
+    ("ret_1m",      tip("1M", "ret_1m"),                   lambda v: signed(v * 100)),
     ("rs_1m",       tip("RS 1M", "rs_1m"),                 lambda v: signed(v, 1)),
     ("rs_3m",       tip("RS 3M", "rs_3m"),                 lambda v: signed(v, 1)),
+    ("rsi",         tip("RSI", "rsi"),                     lambda v: plain(v, 0)),
+    ("atr_ext",     tip("ATR ext", "sma50_atr_ext"),       lambda v: plain(v, 1)),
     ("pct_off_52w", tip("Off 52w hi", "pct_off_52w_high"), lambda v: signed(v, 1)),
+    ("adr",         tip("ADR", "adr"),                     lambda v: plain(v * 100 if pd.notna(v) else v, 1, "%")),
+    ("rel_vol",     tip("Rel vol", "rel_vol"),             lambda v: plain(v, 2)),
 ]
 
-out = []
-for group_name, tickers in meta.get("dashboard_groups", {}).items():
-    sub = board.rs_rank(M, tickers)
-    if sub.empty:
-        continue
-    out.append(f"<h4>{group_name}</h4>")
-    out.append(html_table(
-        sub, RS_SPEC,
-        first_cell=lambda tk, r: f"{tk} <span class='stamp'>{NAMES.get(tk, '')}</span>"))
-HTML("".join(out))
+# Sorted by setup score, then relative strength: the morning question is
+# "which of these is set up right now", not "which moved yesterday".
+wl = M[M["group"] == "watchlist"].sort_values(["setup_n", "rs_1m"], ascending=False)
+
+HTML(html_table(wl, WL_SPEC, first_header=tip("Setup", "setup_checklist"),
+                first_cell=lambda tk, r: f"{tk} {setup_cell(r)}"))
 ```
 
 ## ETFs
@@ -319,69 +117,36 @@ ETF_SPEC = [
     ("rsi",         tip("RSI", "rsi"),                     lambda v: plain(v, 0)),
     ("pct_off_52w", tip("Off 52w hi", "pct_off_52w_high"), lambda v: signed(v, 1)),
 ]
-etf = M[M["group"] == "etf"].sort_values("ret_1m", ascending=False)
-HTML(html_table(etf, ETF_SPEC))
+HTML(html_table(M[M["group"] == "etf"].sort_values("ret_1m", ascending=False), ETF_SPEC))
 ```
 
-## Risk on/off
-
-```{python}
-# TLT vs SPY, both normalized to 100 at the start of the window. Rising = bonds
-# outperforming (risk-off); falling = equities leading (risk-on).
-win = 126
-tlt, spy = series("TLT").tail(win), series("SPY").tail(win)
-fig = go.Figure()
-if not tlt.empty and not spy.empty:
-    j = (tlt[["date", "close"]].rename(columns={"close": "tlt"})
-         .merge(spy[["date", "close"]].rename(columns={"close": "spy"}), on="date"))
-    ratio = (j["tlt"] / j["spy"])
-    fig.add_trace(go.Scatter(x=j["date"], y=ratio / ratio.iloc[0] * 100, mode="lines",
-                             name="TLT / SPY", line=dict(color="#9b59b6", width=2)))
-    fig.add_hline(y=100, line_dash="dot", line_color="#b9c2cc")
-fig.update_layout(height=320, margin=dict(l=8, r=8, t=30, b=26), template="plotly_white",
-                  yaxis=dict(side="right"), showlegend=False,
-                  xaxis=dict(rangebreaks=WEEKEND_BREAK))
-fig.show(config={"responsive": True, "displayModeBar": False})
-```
-
-::: {.stamp}
-TLT (20+ year Treasuries) relative to SPY, normalized to 100 six months ago.
-Rising = bonds outperforming stocks (risk-off). Read the slope, not the level.
 :::
-
-:::
-
-## What these mean
 
 ::: {.callout-note collapse="true" title="Glossary"}
 
 ```{python}
 KEYS = ["setup_checklist", "sma50_atr_ext", "lod_atr_pct", "sma200_rising",
         "sma10_rising", "rs_1m", "rs_3m", "rel_vol", "pct_off_52w_high", "rsi",
-        "adr", "ma_matrix", "vix_ratio", "rsp_spy", "tnx", "tlt_spy_ratio"]
+        "adr", "vix_ratio", "rsp_spy", "tnx"]
 LABELS = {"setup_checklist": "Setup score", "sma50_atr_ext": "ATR extension",
           "lod_atr_pct": "LoD distance", "sma200_rising": "200-MA rising",
           "sma10_rising": "10-MA rising", "rs_1m": "RS 1M", "rs_3m": "RS 3M",
           "rel_vol": "Relative volume", "pct_off_52w_high": "Off 52-week high",
-          "rsi": "RSI", "adr": "ADR", "ma_matrix": "MA matrix",
-          "vix_ratio": "VIX3M / VIX", "rsp_spy": "RSP − SPY", "tnx": "10Y yield",
-          "tlt_spy_ratio": "TLT vs SPY"}
+          "rsi": "RSI", "adr": "ADR", "vix_ratio": "VIX3M / VIX",
+          "rsp_spy": "RSP − SPY", "tnx": "10Y yield"}
 items = "".join(f"<dt>{LABELS[k]}</dt><dd>{HELP[k]}</dd>" for k in KEYS if k in HELP)
 HTML(f"<dl class='glossary'>{items}</dl>")
 ```
 
+:::
+
 ```{python}
 # Build fingerprint. data/ is never published, so without this there is no way
 # to tell from the live page whether a disagreement with a local render comes
-# from different upstream history or from a code change. Off-calendar tickers
-# are the ones whose bar count differs from SPY's — the signal that caught a
-# real RS bug.
+# from different upstream history or from a code change.
 cal_len = meta.get("calendar_len")
 bars = meta.get("bars_per_ticker", {})
 off = sorted(t for t, v in bars.items() if v != cal_len)
-Markdown(
-    f"<p class='stamp'>Build: {cal_len} sessions · {len(bars)} tickers · "
-    f"{len(off)} off SPY's calendar ({', '.join(off) if off else 'none'})</p>")
+Markdown(f"<p class='stamp'>Build: {cal_len} sessions · {len(bars)} tickers · "
+         f"{len(off)} off SPY's calendar ({', '.join(off) if off else 'none'})</p>")
 ```
-
-:::

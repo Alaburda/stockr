@@ -1,0 +1,283 @@
+---
+title: "Single Stock View"
+---
+
+```{python}
+# | tags: [setup]
+import json
+import sys
+from pathlib import Path
+
+import pandas as pd
+from IPython.display import HTML, Markdown, display
+
+sys.path.insert(0, str(Path.cwd()))
+import board
+import charts
+from board import HELP, SETUP_CHECKS, tip
+
+px_all, meta, M = board.load()
+
+# Order tickers by group so the arrow keys walk the watchlist first, then the
+# ETFs and benchmarks — the same "universe nav" idea as the Streamlit viewer.
+GROUP_ORDER = ["watchlist", "etf", "index", "dashboard"]
+TICKERS = [t for g in GROUP_ORDER
+           for t in sorted(M[M["group"] == g].index) if t in M.index]
+```
+
+```{python}
+def num(s):
+    """Round for transport; JSON can't carry NaN, so nulls become gaps.
+
+    2dp because these are prices — more digits just inflate the payload every
+    visitor downloads.
+    """
+    return [None if pd.isna(v) else round(float(v), 2) for v in s]
+
+
+def build_payload():
+    """Per-ticker candles at all three timeframes, plus the metrics row.
+
+    The whole universe ships with the page. A static site can't query for a
+    ticker on demand, and swapping a preloaded series is instant — the point of
+    arrow-key nav is flipping through names without waiting.
+    """
+    out = {}
+    for tk in TICKERS:
+        g = px_all[px_all["ticker"] == tk]
+        tf = {}
+        for label, rule, bars in charts.TIMEFRAMES:
+            f = charts.timeframe_frame(g, rule, bars)
+            # Moving averages are derived in the browser rather than shipped:
+            # they were 3 of 7 arrays and a rolling mean is five lines of JS.
+            tf[label[0].lower()] = {
+                "x": [d.strftime("%Y-%m-%d") for d in f["date"]],
+                "o": num(f["open"]), "h": num(f["high"]),
+                "l": num(f["low"]), "c": num(f["close"]),
+            }
+        r = M.loc[tk]
+
+        def val(key, scale=1.0):
+            v = r.get(key)
+            return None if pd.isna(v) else round(float(v) * scale, 4)
+
+        out[tk] = {
+            "tf": tf,
+            "group": r["group"],
+            "stats": {
+                "close": val("close"), "ret_1d": val("ret_1d", 100),
+                "ret_1w": val("ret_1w", 100), "ret_1m": val("ret_1m", 100),
+                "rs_1m": val("rs_1m"), "rs_3m": val("rs_3m"),
+                "rsi": val("rsi"), "atr_ext": val("atr_ext"),
+                "pct_off_52w": val("pct_off_52w"), "adr": val("adr", 100),
+                "rel_vol": val("rel_vol"),
+            },
+            "setup": [
+                {"label": label, "ok": (None if ok is None else bool(ok))}
+                for (label, _), ok in zip(SETUP_CHECKS, r["setup_results"])
+            ],
+        }
+    return out
+
+
+PAYLOAD = build_payload()
+size_kb = len(json.dumps(PAYLOAD, separators=(",", ":")).encode()) / 1024
+Markdown(f"<p class='stamp'>Last bar **{meta['last_bar']}** · {len(TICKERS)} tickers "
+         f"· ← → to switch · {size_kb:,.0f} KB preloaded</p>")
+```
+
+```{python}
+options = "".join(f'<option value="{t}">{t}</option>' for t in TICKERS)
+tf_btns = "".join(
+    f'<button type="button" data-tf="{label[0].lower()}"'
+    f'{" class=\"active\"" if i == 0 else ""}>{label}</button>'
+    for i, (label, _, _) in enumerate(charts.TIMEFRAMES))
+
+controls = f"""
+<div class="ssv-controls">
+  <button type="button" id="ssv-prev" aria-label="Previous ticker">◀</button>
+  <select id="ssv-ticker" aria-label="Ticker">{options}</select>
+  <button type="button" id="ssv-next" aria-label="Next ticker">▶</button>
+  <span class="stamp" id="ssv-pos"></span>
+</div>
+<div class="tf-switch" id="ssv-tf" role="group" aria-label="Candle timeframe">{tf_btns}</div>
+<div class="stat-strip" id="ssv-stats"></div>
+<div id="ssv-setup" class="setup-chips"></div>
+"""
+HTML(controls)
+```
+
+```{python}
+# Rendered server-side so Quarto ships plotly.js; the script then drives it.
+charts.candle_figure(px_all[px_all["ticker"] == TICKERS[0]], TICKERS[0], height=430).show(
+    config={"responsive": True, "displayModeBar": False})
+```
+
+```{python}
+SCRIPT = r"""
+<script>
+(function () {
+  var DATA = __PAYLOAD__;
+  var TICKERS = __TICKERS__;
+  var COLORS = {ma10: "#3498db", ma20: "#e67e22", ma50: "#9b59b6"};
+  var idx = 0, tf = "d";
+
+  var sel = document.getElementById("ssv-ticker");
+  var pos = document.getElementById("ssv-pos");
+  var statsEl = document.getElementById("ssv-stats");
+  var setupEl = document.getElementById("ssv-setup");
+  var tfHost = document.getElementById("ssv-tf");
+
+  function chart() {
+    var all = document.querySelectorAll(".plotly-graph-div");
+    for (var i = 0; i < all.length; i++) {
+      if (tfHost.compareDocumentPosition(all[i]) & Node.DOCUMENT_POSITION_FOLLOWING) {
+        return all[i];
+      }
+    }
+    return null;
+  }
+
+  function fmtSigned(v, dp, suffix) {
+    if (v === null || v === undefined) return '<span class="stamp">—</span>';
+    var cls = v >= 0 ? "up" : "down";
+    return '<span class="' + cls + '">' + (v >= 0 ? "+" : "") + v.toFixed(dp) +
+           (suffix === undefined ? "%" : suffix) + "</span>";
+  }
+  function fmtNum(v, dp) {
+    return (v === null || v === undefined) ? "—" : v.toFixed(dp);
+  }
+
+  function renderStats(d) {
+    var s = d.stats;
+    var cards = [
+      ["Close", fmtNum(s.close, 2), ""],
+      ["1D", fmtSigned(s.ret_1d, 2), ""],
+      ["1M", fmtSigned(s.ret_1m, 2), ""],
+      ["RS 1M", fmtSigned(s.rs_1m, 1), ""],
+      ["RSI", fmtNum(s.rsi, 0), ""],
+      ["ATR ext", fmtNum(s.atr_ext, 1), ""],
+      ["Off 52w hi", fmtSigned(s.pct_off_52w, 1), ""],
+      ["Rel vol", fmtNum(s.rel_vol, 2), ""]
+    ];
+    statsEl.innerHTML = cards.map(function (c) {
+      return '<div class="stat"><div class="label">' + c[0] +
+             '</div><div class="value">' + c[1] + "</div></div>";
+    }).join("");
+
+    var passed = d.setup.filter(function (c) { return c.ok; }).length;
+    setupEl.innerHTML =
+      '<span class="setup-score ' + (passed >= 5 ? "up" : (passed <= 2 ? "down" : "")) +
+      '">' + passed + "/6</span>" +
+      d.setup.map(function (c) {
+        var cls = c.ok === null ? "na" : (c.ok ? "ok" : "no");
+        var mark = c.ok === null ? "–" : (c.ok ? "✓" : "✗");
+        return '<span class="chip ' + cls + '">' + mark + " " + c.label + "</span>";
+      }).join("");
+  }
+
+  // Rolling mean over the timeframe's own closes, so a 10-period MA on the
+  // weekly chart is 10 weeks — same rule the server-rendered charts follow.
+  function sma(arr, n) {
+    var out = [], sum = 0, q = [];
+    for (var i = 0; i < arr.length; i++) {
+      var v = arr[i];
+      if (v === null) { out.push(null); continue; }
+      q.push(v); sum += v;
+      if (q.length > n) sum -= q.shift();
+      out.push(q.length === n ? sum / n : null);
+    }
+    return out;
+  }
+
+  function traces(d) {
+    var f = d.tf[tf];
+    var out = [{
+      type: "candlestick", x: f.x, open: f.o, high: f.h, low: f.l, close: f.c,
+      increasing: {line: {color: "#18bc9c"}}, decreasing: {line: {color: "#e74c3c"}},
+      name: TICKERS[idx], showlegend: false
+    }];
+    [10, 20, 50].forEach(function (n) {
+      out.push({
+        type: "scatter", mode: "lines", x: f.x, y: sma(f.c, n),
+        name: "SMA" + n, line: {color: COLORS["ma" + n], width: n === 50 ? 1.4 : 1.0}
+      });
+    });
+    return out;
+  }
+
+  function render() {
+    var tk = TICKERS[idx], d = DATA[tk], gd = chart();
+    sel.value = tk;
+    pos.textContent = (idx + 1) + " / " + TICKERS.length + " · " + d.group;
+    renderStats(d);
+    if (!gd || typeof Plotly === "undefined") return;
+    // Weekend gaps only exist on the daily axis.
+    var layout = {
+      height: 430, margin: {l: 8, r: 8, t: 34, b: 26}, template: "plotly_white",
+      xaxis: {rangeslider: {visible: false},
+              rangebreaks: tf === "d" ? [{bounds: ["sat", "mon"]}] : []},
+      yaxis: {side: "right"},
+      legend: {orientation: "h", y: 1.0, yanchor: "bottom", x: 0, xanchor: "left",
+               font: {size: 11}}
+    };
+    Plotly.react(gd, traces(d), layout, {responsive: true, displayModeBar: false});
+  }
+
+  function move(step) {
+    idx = (idx + step + TICKERS.length) % TICKERS.length;
+    render();
+  }
+
+  document.getElementById("ssv-prev").addEventListener("click", function () { move(-1); });
+  document.getElementById("ssv-next").addEventListener("click", function () { move(1); });
+  sel.addEventListener("change", function () {
+    var i = TICKERS.indexOf(sel.value);
+    if (i >= 0) { idx = i; render(); }
+  });
+  tfHost.addEventListener("click", function (ev) {
+    var b = ev.target.closest("button[data-tf]");
+    if (!b) return;
+    tf = b.dataset.tf;
+    tfHost.querySelectorAll("button").forEach(function (x) { x.classList.remove("active"); });
+    b.classList.add("active");
+    render();
+  });
+  // Arrow keys, unless the user is typing in a field.
+  document.addEventListener("keydown", function (ev) {
+    var t = ev.target.tagName;
+    if (t === "INPUT" || t === "TEXTAREA" || t === "SELECT") return;
+    if (ev.key === "ArrowLeft") { move(-1); ev.preventDefault(); }
+    if (ev.key === "ArrowRight") { move(1); ev.preventDefault(); }
+  });
+
+  var tries = 0;
+  (function start() {
+    if ((!chart() || typeof Plotly === "undefined") && tries++ < 100) {
+      return setTimeout(start, 60);
+    }
+    render();
+  })();
+})();
+</script>
+"""
+HTML(SCRIPT
+     .replace("__PAYLOAD__", json.dumps(PAYLOAD, separators=(",", ":")))
+     .replace("__TICKERS__", json.dumps(TICKERS)))
+```
+
+::: {.callout-note collapse="true" title="Glossary"}
+
+```{python}
+KEYS = ["setup_checklist", "sma50_atr_ext", "lod_atr_pct", "sma200_rising",
+        "sma10_rising", "rs_1m", "rel_vol", "pct_off_52w_high", "rsi", "adr"]
+LABELS = {"setup_checklist": "Setup score", "sma50_atr_ext": "ATR extension",
+          "lod_atr_pct": "LoD distance", "sma200_rising": "200-MA rising",
+          "sma10_rising": "10-MA rising", "rs_1m": "RS 1M",
+          "rel_vol": "Relative volume", "pct_off_52w_high": "Off 52-week high",
+          "rsi": "RSI", "adr": "ADR"}
+items = "".join(f"<dt>{LABELS[k]}</dt><dd>{HELP[k]}</dd>" for k in KEYS if k in HELP)
+HTML(f"<dl class='glossary'>{items}</dl>")
+```
+
+:::

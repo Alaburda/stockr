@@ -49,6 +49,14 @@ jobs:
       - name: Fetch prices
         run: python scripts/fetch_prices.py
 
+      # ~500 tickers: the slowest and most failure-prone step, and the board
+      # doesn't depend on it. Allowed to fail — the Indicators page renders a
+      # short explanation in place of the breadth panels when its files are
+      # absent, rather than the whole build going down with it.
+      - name: Fetch S&P 500 aggregates
+        continue-on-error: true
+        run: python scripts/fetch_sp500.py
+
       - name: Render site
         run: quarto render site
 

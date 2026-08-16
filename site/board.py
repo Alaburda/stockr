@@ -12,6 +12,7 @@ re-written, keeping one source of truth for what each signal means.
 from __future__ import annotations
 
 import html
+import json
 import sys
 from pathlib import Path
 
@@ -185,6 +186,35 @@ def latest_metrics(px: pd.DataFrame, bench: str = BENCH) -> pd.DataFrame:
     df["setup_results"] = results
     df["setup_n"] = results.apply(lambda xs: sum(1 for x in xs if x))
     return df
+
+
+def load(data_dir: str | Path = "data"):
+    """Load the published data every page starts from.
+
+    Returns (prices, meta, metrics). Pages call this instead of repeating the
+    read + latest_metrics dance.
+    """
+    d = Path(data_dir)
+    px = pd.read_csv(d / "prices.csv", parse_dates=["date"]).sort_values(["ticker", "date"])
+    meta = json.loads((d / "meta.json").read_text(encoding="utf-8"))
+    return px, meta, latest_metrics(px)
+
+
+def load_sp500(data_dir: str | Path = "data"):
+    """S&P 500 aggregates, or None if that best-effort job didn't produce them.
+
+    fetch_sp500.py is allowed to fail without failing the build, so every
+    caller has to cope with these being absent.
+    """
+    d = Path(data_dir)
+    meta_path = d / "sp500_meta.json"
+    if not meta_path.exists():
+        return None
+    out = {"meta": json.loads(meta_path.read_text(encoding="utf-8"))}
+    for name, parse_dates in (("breadth", ["date"]), ("highlow", ["date"]), ("sector_rs", None)):
+        p = d / f"{name}.csv"
+        out[name] = (pd.read_csv(p, parse_dates=parse_dates) if p.exists() else None)
+    return out
 
 
 def rs_rank(df: pd.DataFrame, tickers: list[str], col: str = "ret_1m") -> pd.DataFrame:

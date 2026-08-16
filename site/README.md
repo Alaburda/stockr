@@ -28,24 +28,32 @@ python -m http.server 4321 --directory site/_site
 | File | Purpose |
 |---|---|
 | `_quarto.yml` | Site config — theme, navbar, output dir |
-| `index.qmd` | The Morning Board page (market strip, SPY chart, tabs) |
+| `index.qmd` | **Morning Board** — market strip, SPY chart, watchlist, ETFs |
+| `indicators.qmd` | **Indicators** — breadth, new highs/lows, sector RS, RS boards, benchmarks, risk on/off |
+| `stock.qmd` | **Single Stock View** — any tracked ticker, arrow-key nav |
 | `board.py` | Metrics — the app's SQL views ported to pandas |
+| `charts.py` | Shared candle/table builders used by all three pages |
 | `styles.scss` | Card + table styling on top of the `flatly` theme |
 | `resize-tabs.html` | Resizes Plotly charts when their tab becomes visible |
-| `data/` | Generated, gitignored — `prices.csv` + `meta.json` |
+| `data/` | Generated, gitignored |
 
-## Page structure
+## The three pages
 
-The market strip and the SPY chart stay pinned at the top; everything else is
-in tabs, so you don't scroll past sections you don't care about:
+**Morning Board** is the glance: market strip, SPY candles, the watchlist
+sorted by setup score, ETFs.
 
-| Tab | What it shows |
-|---|---|
-| **Watchlist** | Setup score, returns, RS vs SPY, RSI, ATR ext, % off 52w high |
-| **Benchmarks** | MA matrix (5/10/20/50/100/150/200) + percent-positive row, trailing returns |
-| **RS boards** | Index / Segment / EW Sector / SPDR Sector, percentile-ranked within each board |
-| **ETFs** | The ETF snapshot |
-| **Risk on/off** | TLT vs SPY, normalized |
+**Indicators** is the market internals: S&P 500 breadth, 52-week new
+highs/lows, sector RS, the RS boards, the MA matrix, and TLT-vs-SPY.
+
+**Single Stock View** is any tracked ticker with `←`/`→` nav. The whole
+universe's candles ship with the page — a static site can't query on demand,
+and the point of arrow-key nav is flipping through names without waiting.
+
+To keep that payload honest, moving averages are **computed in the browser**
+rather than shipped (they were 3 of 7 arrays; a rolling mean is five lines of
+JS) and prices are rounded to 2dp. That took the page from 501 KB to 253 KB
+gzipped. Client and server SMAs agree to sub-cent, which is exactly the drift
+2dp rounding predicts.
 
 `board.py` ports `v_latest`, `v_perf`, `v_rs_spy` and `v_ma_matrix` from
 `db/views.sql` to pandas — same definitions, no database. It imports `HELP`
@@ -78,6 +86,28 @@ The `n/6` badge is the app's A-setup checklist: ATR ext < 4x, LoD dist < 0.6
 ATR, 200-MA rising, 10-MA rising, RS 1M > 0, rel vol >= 1. Hover it to see
 which checks passed. The watchlist sorts by this, then by RS — the morning
 question is "what is set up", not "what moved yesterday".
+
+## S&P 500 aggregates
+
+`scripts/fetch_sp500.py` pulls the ~500 constituents (list scraped from
+Wikipedia by `app/streamlit/lib/universe.py`) and writes **only aggregates** —
+never the ~500 x 500 price matrix, which would be a ~100 MB CSV of numbers no
+page reads individually:
+
+| File | Contents |
+|---|---|
+| `breadth.csv` | per date: % of members above their own 20/50/200-day SMA, % up on the day |
+| `highlow.csv` | per date: new 52-week highs, new lows, net |
+| `sector_rs.csv` | per GICS sector: member count, 1m/3m return and RS vs SPY |
+
+It runs **after** `fetch_prices.py` (it reads SPY's calendar from the board's
+own CSV) and is wired with `continue-on-error`. It is the slowest and most
+failure-prone step in the build, and the board doesn't depend on it — so when
+it fails, the Indicators page renders a short explanation in place of the
+breadth panels and everything else still publishes.
+
+It has its own floor: below 70% of constituents it refuses to write, because
+"42% above the 50-day" is meaningless if it's 42% of a third of the index.
 
 ### Charts in tabs
 

@@ -123,6 +123,66 @@ table.board tr.summary td {
   background: #f7f9fa;
 }
 
+// ── Single Stock View controls ──────────────────────────────────────────────
+.ssv-controls {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  margin: .25rem 0 .5rem;
+  flex-wrap: wrap;
+}
+
+.ssv-controls button {
+  min-width: 44px;
+  min-height: 44px;
+  border: 1px solid #dfe3e8;
+  border-radius: 6px;
+  background: #fff;
+  color: #2c3e50;
+  font-size: 1rem;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ssv-controls button:hover { border-color: #b9c2cc; }
+
+.ssv-controls select {
+  min-height: 44px;
+  padding: 0 .5rem;
+  border: 1px solid #dfe3e8;
+  border-radius: 6px;
+  background: #fff;
+  color: #2c3e50;
+  font-weight: 600;
+  font-size: .95rem;
+}
+
+.setup-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .3rem;
+  align-items: center;
+  margin: 0 0 .75rem;
+}
+
+.setup-score {
+  font-weight: 700;
+  font-size: 1rem;
+  margin-right: .3rem;
+}
+
+.chip {
+  font-size: .72rem;
+  padding: .18rem .45rem;
+  border-radius: 4px;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+
+.chip.ok { background: rgba(24, 188, 156, .14); color: #10826f; }
+.chip.no { background: rgba(231, 76, 60, .12);  color: #c0392b; }
+.chip.na { background: #f0f2f4; color: #7b8794; }
+
 dl.glossary {
   margin: 0;
   dt { font-weight: 700; color: #2c3e50; margin-top: .7rem; }
