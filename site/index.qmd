@@ -370,4 +370,18 @@ items = "".join(f"<dt>{LABELS[k]}</dt><dd>{HELP[k]}</dd>" for k in KEYS if k in 
 HTML(f"<dl class='glossary'>{items}</dl>")
 ```
 
+```{python}
+# Build fingerprint. data/ is never published, so without this there is no way
+# to tell from the live page whether a disagreement with a local render comes
+# from different upstream history or from a code change. Off-calendar tickers
+# are the ones whose bar count differs from SPY's — the signal that caught a
+# real RS bug.
+cal_len = meta.get("calendar_len")
+bars = meta.get("bars_per_ticker", {})
+off = sorted(t for t, v in bars.items() if v != cal_len)
+Markdown(
+    f"<p class='stamp'>Build: {cal_len} sessions · {len(bars)} tickers · "
+    f"{len(off)} off SPY's calendar ({', '.join(off) if off else 'none'})</p>")
+```
+
 :::
