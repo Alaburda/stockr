@@ -5,8 +5,11 @@ pandas>=2.0
 numpy>=1.26
 plotly>=5.20
 lxml>=5.0
-# Quarto's python engine
+# Quarto's python engine. pyyaml is not a dependency of any of the others, but
+# Quarto's bundled jupyter.py imports it — without it `quarto render` dies with
+# "ModuleNotFoundError: No module named 'yaml'" before the first cell runs.
 jupyter-client>=8.0
 ipykernel>=6.29
 nbclient>=0.10
 nbformat>=5.10
+pyyaml>=6.0

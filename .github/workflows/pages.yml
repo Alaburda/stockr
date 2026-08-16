@@ -40,7 +40,11 @@ jobs:
       - name: Install Python dependencies
         run: pip install -r scripts/requirements.txt
 
+      # Pinned to the version the site was developed and verified against, so a
+      # new Quarto release can't silently change the render. Safe to bump.
       - uses: quarto-dev/quarto-actions/setup@v2
+        with:
+          version: "1.5.52"
 
       - name: Fetch prices
         run: python scripts/fetch_prices.py
